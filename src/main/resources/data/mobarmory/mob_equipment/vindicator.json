@@ -1,0 +1,51 @@
+{
+  "mob": "minecraft:vindicator",
+  "chance": 1.0,
+
+  "sets": [
+    {
+      "weight": 3,
+
+      "mainhand": [
+        {
+          "item": "minecraft:iron_sword",
+          "weight": 2,
+          "enchant": {
+            "type": "random",
+            "power": 30
+          }
+        },
+        {
+          "item": "minecraft:stone_axe",
+          "weight": 1
+        }
+      ],
+
+      "head": [
+        { "item": "minecraft:iron_helmet" }
+      ],
+
+      "chest": [
+        { "item": "minecraft:iron_chestplate" }
+      ]
+    },
+
+    {
+      "weight": 1,
+
+      "mainhand": [
+        {
+          "item": "minecraft:diamond_axe",
+          "weight": 1,
+          "enchant": {
+            "type": "predefined",
+            "list": [
+              { "id": "minecraft:sharpness", "level": 4 },
+              { "id": "minecraft:unbreaking", "level": 3 }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

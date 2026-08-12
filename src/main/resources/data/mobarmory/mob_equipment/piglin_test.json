@@ -1,0 +1,56 @@
+{
+  "mob": "minecraft:piglin",
+  "chance": 0.6,
+  "difficulties": [
+    {
+      "match": [
+        "normal"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "minecraft:nether_wastes"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:golden_sword",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": [
+        "hard"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "global"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:golden_axe",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "random",
+                    "power": 20
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

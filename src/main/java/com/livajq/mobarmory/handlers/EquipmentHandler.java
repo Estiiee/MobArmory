@@ -9,6 +9,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -32,15 +33,39 @@ public class EquipmentHandler {
         MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.ENTRIES.get(mobId);
         if (entry == null) return;
         
-        if (mob.getRandom().nextFloat() > entry.chance) return;
+        //pick the difficulty group that applies right now.
+        //same order-dependent rule as biome matching below: first group that either
+        //specifically matches or is "global" wins, so put specific difficulties before a global fallback.
+        MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(mob.level());
+        MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = null;
+        
+        for (MobEquipmentReloadListener.DifficultyGroup group : entry.difficultyGroups) {
+            boolean matches = false;
+            boolean globalGroup = false;
+            
+            for (MobEquipmentReloadListener.DifficultyLevel matcher : group.matchers()) {
+                if (matcher == MobEquipmentReloadListener.DifficultyLevel.GLOBAL) globalGroup = true;
+                else if (matcher == currentDifficulty) {
+                    matches = true;
+                    break;
+                }
+            }
+            
+            if (matches || globalGroup) {
+                chosenDifficultyGroup = group;
+                break;
+            }
+        }
+        
+        if (chosenDifficultyGroup == null) return;
         
         Holder<Biome> biomeHolder = mob.level().getBiome(mob.blockPosition());
         ResourceKey<Biome> biomeKey = biomeHolder.unwrapKey().orElse(null);
         
-        //biome groups if present
-        MobEquipmentReloadListener.EquipmentSet chosenSet = null;
+        //biome groups within the chosen difficulty group, if present
+        MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
         
-        for (MobEquipmentReloadListener.BiomeGroup group : entry.biomeGroups) {
+        for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups()) {
             boolean matches = false;
             boolean globalGroup = false;
             
@@ -68,16 +93,35 @@ public class EquipmentHandler {
             }
             
             if (matches || globalGroup) {
-                chosenSet = pickWeightedSet(group.sets(), mob.getRandom());
+                chosenBiomeGroup = group;
                 break;
             }
         }
         
-        //global sets fallback
-        if (chosenSet == null && !entry.globalSets.isEmpty()) {
-            chosenSet = pickWeightedSet(entry.globalSets, mob.getRandom());
+        List<MobEquipmentReloadListener.EquipmentSet> candidateSets;
+        Float biomeGroupChance;
+        
+        if (chosenBiomeGroup != null) {
+            candidateSets = chosenBiomeGroup.sets();
+            biomeGroupChance = chosenBiomeGroup.chance();
+        }
+        //no biome restriction in this difficulty group: fall back to its own direct sets
+        else if (!chosenDifficultyGroup.globalSets().isEmpty()) {
+            candidateSets = chosenDifficultyGroup.globalSets();
+            biomeGroupChance = null;
+        }
+        else {
+            return;
         }
         
+        //most specific chance wins: biome group > difficulty group > mob-level default
+        float effectiveChance = biomeGroupChance != null ? biomeGroupChance
+                : chosenDifficultyGroup.chance() != null ? chosenDifficultyGroup.chance()
+                : entry.chance;
+        
+        if (mob.getRandom().nextFloat() > effectiveChance) return;
+        
+        MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(candidateSets, mob.getRandom());
         if (chosenSet == null) return;
         
         //apply items and their enchants
@@ -103,6 +147,19 @@ public class EquipmentHandler {
                 mob.setItemSlot(slotEntry.getKey(), stack);
             }
         }
+    }
+    
+    //hardcore worlds are always forced to HARD difficulty, but "hardcore" as a matcher is treated
+    //as its own distinct level since that's the more useful thing to key equipment off of.
+    //peaceful is folded into easy for matching purposes - mobs generally don't spawn on peaceful anyway.
+    private static MobEquipmentReloadListener.DifficultyLevel currentDifficulty(Level level) {
+        if (level.getLevelData().isHardcore()) return MobEquipmentReloadListener.DifficultyLevel.HARDCORE;
+        
+        return switch (level.getDifficulty()) {
+            case EASY, PEACEFUL -> MobEquipmentReloadListener.DifficultyLevel.EASY;
+            case NORMAL -> MobEquipmentReloadListener.DifficultyLevel.NORMAL;
+            case HARD -> MobEquipmentReloadListener.DifficultyLevel.HARD;
+        };
     }
     
     private static MobEquipmentReloadListener.EquipmentSet pickWeightedSet(List<MobEquipmentReloadListener.EquipmentSet> sets, RandomSource random) {

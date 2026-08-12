@@ -2,6 +2,7 @@ package com.livajq.mobarmory;
 
 import com.livajq.mobarmory.data.MobEquipmentList;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
+import com.livajq.mobarmory.handlers.PacketHandler;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
@@ -30,14 +31,12 @@ public class MobArmory {
         forgeEventBus.addListener(this::reloadListener);
         
         context.registerConfig(ModConfig.Type.COMMON, Config.SPEC, "mobarmory.toml");
-        
-        MobEquipmentList.init();
-        
     }
     
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
-        
+            PacketHandler.register();
+            MobEquipmentList.init();
         });
     }
     

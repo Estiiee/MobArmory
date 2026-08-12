@@ -1,0 +1,38 @@
+{
+  "mob": "minecraft:stray",
+  "chance": 1.0,
+  "difficulties": [
+    {
+      "match": [
+        "global"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "#forge:is_snowy"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:bow",
+                  "weight": 1
+                }
+              ]
+            },
+            {
+              "weight": 3,
+              "mainhand": [
+                {
+                  "item": "minecraft:crossbow",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

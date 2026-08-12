@@ -1,0 +1,29 @@
+{
+  "mob": "minecraft:wolf",
+  "chance": 0.5,
+  "difficulties": [
+    {
+      "match": [
+        "global"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "global"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "head": [
+                {
+                  "item": "minecraft:diamond_helmet",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

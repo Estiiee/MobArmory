@@ -1,0 +1,29 @@
+{
+  "mob": "minecraft:enderman",
+  "chance": 0.2,
+  "difficulties": [
+    {
+      "match": [
+        "hard"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "global"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:end_stone",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

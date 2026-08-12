@@ -1,0 +1,80 @@
+{
+  "mob": "minecraft:skeleton",
+  "chance": 0.8,
+  "difficulties": [
+    {
+      "match": [
+        "easy"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "#forge:is_snowy"
+          ],
+          "chance": 0.5,
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:stone_sword",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": [
+        "hard"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "minecraft:desert"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:iron_sword",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "random",
+                    "power": 10
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": [
+        "global"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "global"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:bow",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

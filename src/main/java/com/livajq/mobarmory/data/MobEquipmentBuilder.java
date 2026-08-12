@@ -4,14 +4,13 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.livajq.mobarmory.MobArmory;
+import com.livajq.mobarmory.Config;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 
@@ -20,7 +19,7 @@ public class MobEquipmentBuilder {
     private ResourceLocation mob;
     private float chance = 1.0f;
     
-    private final List<BiomeGroupBuilder> biomeGroups = new ArrayList<>();
+    private final List<DifficultyGroupBuilder> difficultyGroups = new ArrayList<>();
     
     public static MobEquipmentBuilder mob(String id) {
         MobEquipmentBuilder b = new MobEquipmentBuilder();
@@ -32,27 +31,25 @@ public class MobEquipmentBuilder {
         this.chance = chance;
         return this;
     }
-
-    public BiomeGroupBuilder biomeGroup() {
-        BiomeGroupBuilder g = new BiomeGroupBuilder(this);
-        biomeGroups.add(g);
+    
+    public DifficultyGroupBuilder difficultyGroup() {
+        DifficultyGroupBuilder g = new DifficultyGroupBuilder(this);
+        difficultyGroups.add(g);
         return g;
     }
     
     public void createFile(String fileName) {
-        if (FMLLoader.isProduction()) {
-            MobArmory.LOGGER.warn("Attempted to create a mob_equipment file outside of dev environment");
-            return;
-        }
         try {
             JsonObject json = buildJson();
-
-            //output in run/data
-            Path dir = Paths.get("data", MobArmory.MODID, "mob_equipment");
+            
+            Path dir = FMLPaths.GAMEDIR.get().resolve(Config.outputDirectory).normalize();
             Files.createDirectories(dir);
-
-            Path file = dir.resolve(fileName + ".json");
-        
+            
+            Path file = dir.resolve(fileName + ".json").normalize();
+            if (!file.startsWith(dir)) {
+                throw new IllegalArgumentException("Invalid file name: " + fileName);
+            }
+            
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             String jsonString = gson.toJson(json);
             
@@ -69,26 +66,114 @@ public class MobEquipmentBuilder {
         root.addProperty("mob", mob.toString());
         root.addProperty("chance", chance);
         
-        if (!biomeGroups.isEmpty()) {
-            JsonArray biomeArr = new JsonArray();
-            for (BiomeGroupBuilder g : biomeGroups) {
-                biomeArr.add(g.toJson());
+        if (!difficultyGroups.isEmpty()) {
+            JsonArray diffArr = new JsonArray();
+            for (DifficultyGroupBuilder g : difficultyGroups) {
+                diffArr.add(g.toJson());
             }
-            root.add("biomes", biomeArr);
-            return root;
+            root.add("difficulties", diffArr);
         }
         
         return root;
     }
     
-    public static class BiomeGroupBuilder {
+    public static class DifficultyGroupBuilder {
         
         private final MobEquipmentBuilder parent;
         
         private final List<String> matchers = new ArrayList<>();
+        private Float chance = null;
+        private final List<BiomeGroupBuilder> biomeGroups = new ArrayList<>();
+        
+        public DifficultyGroupBuilder(MobEquipmentBuilder parent) {
+            this.parent = parent;
+        }
+        
+        public DifficultyGroupBuilder easy() {
+            matchers.add("easy");
+            return this;
+        }
+        
+        public DifficultyGroupBuilder normal() {
+            matchers.add("normal");
+            return this;
+        }
+        
+        public DifficultyGroupBuilder hard() {
+            matchers.add("hard");
+            return this;
+        }
+        
+        public DifficultyGroupBuilder hardcore() {
+            matchers.add("hardcore");
+            return this;
+        }
+        
+        //difficulty matchers: "easy" / "normal" / "hard" / "hardcore"
+        public DifficultyGroupBuilder match(String raw) {
+            matchers.add(raw);
+            return this;
+        }
+        
+        public DifficultyGroupBuilder matches(String... raws) {
+            Collections.addAll(matchers, raws);
+            return this;
+        }
+        
+        //use to skip difficulty restrictions.
+        //can be mixed with match(), in which case specific groups take priority and global acts as a fallback for all other difficulties
+        public DifficultyGroupBuilder global() {
+            matchers.add("global");
+            return this;
+        }
+        
+        //overrides the mob-level chance as the default for biome groups in this difficulty group
+        //that don't specify their own chance
+        public DifficultyGroupBuilder chance(float chance) {
+            this.chance = chance;
+            return this;
+        }
+        
+        public BiomeGroupBuilder biomeGroup() {
+            BiomeGroupBuilder g = new BiomeGroupBuilder(this);
+            biomeGroups.add(g);
+            return g;
+        }
+        
+        public MobEquipmentBuilder endDifficultyGroup() {
+            return parent;
+        }
+        
+        public JsonObject toJson() {
+            JsonObject obj = new JsonObject();
+            
+            JsonArray matchArr = new JsonArray();
+            for (String m : matchers) matchArr.add(m);
+            obj.add("match", matchArr);
+            
+            if (chance != null) obj.addProperty("chance", chance);
+            
+            if (!biomeGroups.isEmpty()) {
+                JsonArray biomeArr = new JsonArray();
+                for (BiomeGroupBuilder g : biomeGroups) {
+                    biomeArr.add(g.toJson());
+                }
+                obj.add("biomes", biomeArr);
+            }
+            
+            return obj;
+        }
+    }
+    
+    public static class BiomeGroupBuilder {
+        
+        private final DifficultyGroupBuilder parent;
+        
+        private final List<String> matchers = new ArrayList<>();
+        private Float chance = null;
         private final List<EquipmentSetBuilder> sets = new ArrayList<>();
         
-        public BiomeGroupBuilder(MobEquipmentBuilder parent) {
+        public BiomeGroupBuilder(DifficultyGroupBuilder parent) {
             this.parent = parent;
         }
         
@@ -110,6 +195,13 @@ public class MobEquipmentBuilder {
             return this;
         }
         
+        //overrides the difficulty group's/mob's chance for this specific biome group
+        //e.g. cold biomes 50% frozen gear, hot biomes 30% fire gear
+        public BiomeGroupBuilder chance(float chance) {
+            this.chance = chance;
+            return this;
+        }
+        
         //equipment set entry
         public EquipmentSetBuilder set() {
             EquipmentSetBuilder s = new EquipmentSetBuilder(this);
@@ -117,7 +209,7 @@ public class MobEquipmentBuilder {
             return s;
         }
         
-        public MobEquipmentBuilder endBiomeGroup() {
+        public DifficultyGroupBuilder endBiomeGroup() {
             return parent;
         }
         
@@ -127,6 +219,8 @@ public class MobEquipmentBuilder {
             JsonArray matchArr = new JsonArray();
             for (String m : matchers) matchArr.add(m);
             obj.add("match", matchArr);
+            
+            if (chance != null) obj.addProperty("chance", chance);
             
             if (!sets.isEmpty()) {
                 JsonArray setArr = new JsonArray();
@@ -141,14 +235,14 @@ public class MobEquipmentBuilder {
     }
     
     public static class EquipmentSetBuilder {
- 
+        
         private final BiomeGroupBuilder parentBiome;
         
         private int weight = 1;
         
         //slotName -> list of WeightedItemBuilder
         private final Map<String, List<WeightedItemBuilder>> slots = new HashMap<>();
- 
+        
         //biome group set
         public EquipmentSetBuilder(BiomeGroupBuilder parentBiome) {
             this.parentBiome = parentBiome;
@@ -205,7 +299,7 @@ public class MobEquipmentBuilder {
             items.add(w);
             return w;
         }
-     
+        
         public EquipmentSetBuilder endSlot() {
             return parentSet;
         }
@@ -229,7 +323,7 @@ public class MobEquipmentBuilder {
             this.weight = w;
             return this;
         }
-
+        
         public EnchantBuilder randomEnchant() {
             this.enchantBuilder = new EnchantBuilder(this, true);
             return enchantBuilder;
@@ -243,7 +337,7 @@ public class MobEquipmentBuilder {
         public SlotBuilder endItem() {
             return parentSlot;
         }
-
+        
         public JsonObject toJson() {
             JsonObject obj = new JsonObject();
             
@@ -281,7 +375,7 @@ public class MobEquipmentBuilder {
             }
             return this;
         }
-
+        
         public EnchantBuilder addPredefined(String id, int level) {
             if (!isRandom) {
                 predefinedIds.add(id);
@@ -293,7 +387,7 @@ public class MobEquipmentBuilder {
         public WeightedItemBuilder endEnchant() {
             return parentItem;
         }
-
+        
         public JsonObject toJson() {
             JsonObject obj = new JsonObject();
             

@@ -2,7 +2,7 @@ package com.livajq.mobarmory.packet;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.livajq.mobarmory.client.gui.screen.EditScreen;
+import com.livajq.mobarmory.client.gui.screen.EditScreenMain;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
@@ -41,7 +41,7 @@ public class OpenEditScreenPacket {
         ctx.get().enqueueWork(() -> {
             JsonObject obj = JsonParser.parseString(msg.json).getAsJsonObject();
             MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.fromJson(msg.fileName, obj);
-            Minecraft.getInstance().setScreen(new EditScreen(entry));
+            Minecraft.getInstance().setScreen(new EditScreenMain(entry));
         });
         ctx.get().setPacketHandled(true);
     }

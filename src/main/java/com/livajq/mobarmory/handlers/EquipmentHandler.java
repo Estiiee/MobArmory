@@ -43,7 +43,7 @@ public class EquipmentHandler {
             boolean matches = false;
             boolean globalGroup = false;
             
-            for (MobEquipmentReloadListener.DifficultyLevel matcher : group.matchers()) {
+            for (MobEquipmentReloadListener.DifficultyLevel matcher : group.matchers) {
                 if (matcher == MobEquipmentReloadListener.DifficultyLevel.GLOBAL) globalGroup = true;
                 else if (matcher == currentDifficulty) {
                     matches = true;
@@ -65,11 +65,11 @@ public class EquipmentHandler {
         //biome groups within the chosen difficulty group, if present
         MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
         
-        for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups()) {
+        for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups) {
             boolean matches = false;
             boolean globalGroup = false;
             
-            for (MobEquipmentReloadListener.BiomeMatch matcher : group.matchers()) {
+            for (MobEquipmentReloadListener.BiomeMatch matcher : group.matchers) {
                 
                 //used either by the builder for unrestricted entries or as a fallback if the entity spawns outside any specific biome group
                 //manual JSONs with no biome restrictions can skip the biome groups altogether
@@ -102,12 +102,12 @@ public class EquipmentHandler {
         Float biomeGroupChance;
         
         if (chosenBiomeGroup != null) {
-            candidateSets = chosenBiomeGroup.sets();
-            biomeGroupChance = chosenBiomeGroup.chance();
+            candidateSets = chosenBiomeGroup.sets;
+            biomeGroupChance = chosenBiomeGroup.chance;
         }
         //no biome restriction in this difficulty group: fall back to its own direct sets
-        else if (!chosenDifficultyGroup.globalSets().isEmpty()) {
-            candidateSets = chosenDifficultyGroup.globalSets();
+        else if (!chosenDifficultyGroup.globalSets.isEmpty()) {
+            candidateSets = chosenDifficultyGroup.globalSets;
             biomeGroupChance = null;
         }
         else {
@@ -116,7 +116,7 @@ public class EquipmentHandler {
         
         //most specific chance wins: biome group > difficulty group > mob-level default
         float effectiveChance = biomeGroupChance != null ? biomeGroupChance
-                : chosenDifficultyGroup.chance() != null ? chosenDifficultyGroup.chance()
+                : chosenDifficultyGroup.chance != null ? chosenDifficultyGroup.chance
                 : entry.chance;
         
         if (mob.getRandom().nextFloat() > effectiveChance) return;
@@ -125,20 +125,20 @@ public class EquipmentHandler {
         if (chosenSet == null) return;
         
         //apply items and their enchants
-        for (var slotEntry : chosenSet.slots().entrySet()) {
+        for (var slotEntry : chosenSet.slots.entrySet()) {
             MobEquipmentReloadListener.WeightedItem chosen =
                     pickWeightedItem(slotEntry.getValue(), mob.getRandom());
             
             if (chosen != null) {
-                ItemStack stack = new ItemStack(chosen.item());
+                ItemStack stack = new ItemStack(chosen.item);
                 
                 //random enchants
-                if (chosen.enchant() instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
+                if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
                     EnchantmentHelper.enchantItem(mob.getRandom(), stack, rnd.power(), false);
                 }
                 
                 //predefined enchants
-                if (chosen.enchant() instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
+                if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
                     for (int i = 0; i < pre.enchants().size(); i++) {
                         stack.enchant(pre.enchants().get(i).value(), pre.levels().get(i));
                     }
@@ -163,26 +163,26 @@ public class EquipmentHandler {
     }
     
     private static MobEquipmentReloadListener.EquipmentSet pickWeightedSet(List<MobEquipmentReloadListener.EquipmentSet> sets, RandomSource random) {
-        int totalWeight = sets.stream().mapToInt(MobEquipmentReloadListener.EquipmentSet::weight).sum();
+        int totalWeight = sets.stream().mapToInt(s -> s.weight).sum();
         if (totalWeight <= 0) return null;
         
         int roll = random.nextInt(totalWeight);
         int cumulative = 0;
         for (var set : sets) {
-            cumulative += set.weight();
+            cumulative += set.weight;
             if (roll < cumulative) return set;
         }
         return sets.get(sets.size() - 1);
     }
     
     private static MobEquipmentReloadListener.WeightedItem pickWeightedItem(List<MobEquipmentReloadListener.WeightedItem> items, RandomSource random) {
-        int totalWeight = items.stream().mapToInt(MobEquipmentReloadListener.WeightedItem::weight).sum();
+        int totalWeight = items.stream().mapToInt(s -> s.weight).sum();
         if (totalWeight <= 0) return null;
         
         int roll = random.nextInt(totalWeight);
         int cumulative = 0;
         for (var item : items) {
-            cumulative += item.weight();
+            cumulative += item.weight;
             if (roll < cumulative) return item;
         }
         return items.get(items.size() - 1);

@@ -1,5 +1,7 @@
 package com.livajq.mobarmory.client.gui.widget;
 
+import com.livajq.mobarmory.handlers.PacketHandler;
+import com.livajq.mobarmory.packet.LoadMobEquipmentEntryPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractSelectionList;
@@ -30,7 +32,7 @@ public class LookupListWidget extends AbstractSelectionList<LookupListWidget.Ent
         
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            //PacketHandler.INSTANCE.sendToServer(new OpenEditWindowPacket(fileName));
+            PacketHandler.INSTANCE.sendToServer(new LoadMobEquipmentEntryPacket(fileName));
             return true;
         }
     }

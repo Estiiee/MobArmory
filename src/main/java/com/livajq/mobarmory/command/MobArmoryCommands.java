@@ -4,9 +4,9 @@ import com.livajq.mobarmory.Config;
 import com.livajq.mobarmory.MobArmory;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import com.livajq.mobarmory.handlers.PacketHandler;
+import com.livajq.mobarmory.packet.OpenEditScreenPacket;
 import com.livajq.mobarmory.packet.OpenLookupScreenPacket;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -32,12 +32,7 @@ public class MobArmoryCommands {
         dispatcher.register(
                 Commands.literal("mobarmory")
                         .then(Commands.literal("createnew")
-                                .then(Commands.argument("filename", StringArgumentType.string())
-                                        .executes(ctx -> {
-                                            String fileName = StringArgumentType.getString(ctx, "filename");
-                                            return createnew(ctx.getSource(), fileName);
-                                        })
-                                )
+                                .executes(ctx -> createnew(ctx.getSource()))
                         )
                         
                         .then(Commands.literal("lookup")
@@ -47,20 +42,19 @@ public class MobArmoryCommands {
         );
     }
     
-    private static int createnew(CommandSourceStack src, String fileName) {
+    private static int createnew(CommandSourceStack src) {
+        ServerPlayer player = src.getPlayer();
+        if (player == null) {
+            src.sendFailure(Component.literal("This command can only be used by a player"));
+            return 0;
+        }
         
-        MobEquipmentReloadListener.MobEquipmentEntry entry =
-                new MobEquipmentReloadListener.MobEquipmentEntry(
-                        fileName,
-                        null,
-                        1.0f,
-                        new ArrayList<>()
-                );
+        MobEquipmentReloadListener.MobEquipmentEntry blank =
+                new MobEquipmentReloadListener.MobEquipmentEntry(null, null, 1.0f, new ArrayList<>());
         
-        MobEquipmentReloadListener.LOOKUP_FILES.add(entry);
+        PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new OpenEditScreenPacket(blank));
         
-        src.sendSuccess(() -> Component.literal("Created new entry: " + fileName), false);
-        
+        src.sendSuccess(() -> Component.literal("Created new entry"), false);
         return 1;
     }
     

@@ -1,6 +1,8 @@
 package com.livajq.mobarmory.handlers;
 
 import com.livajq.mobarmory.MobArmory;
+import com.livajq.mobarmory.packet.LoadMobEquipmentEntryPacket;
+import com.livajq.mobarmory.packet.OpenEditScreenPacket;
 import com.livajq.mobarmory.packet.OpenLookupScreenPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.network.NetworkRegistry;
@@ -21,5 +23,7 @@ public class PacketHandler {
         int id = 0;
         
         INSTANCE.registerMessage(id++, OpenLookupScreenPacket.class, OpenLookupScreenPacket::encode, OpenLookupScreenPacket::decode, OpenLookupScreenPacket::handle);
+        INSTANCE.registerMessage(id++, LoadMobEquipmentEntryPacket.class, LoadMobEquipmentEntryPacket::encode, LoadMobEquipmentEntryPacket::decode, LoadMobEquipmentEntryPacket::handle);
+        INSTANCE.registerMessage(id++, OpenEditScreenPacket.class, OpenEditScreenPacket::encode, OpenEditScreenPacket::decode, OpenEditScreenPacket::handle);
     }
 }

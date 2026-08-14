@@ -4,10 +4,12 @@ import com.livajq.mobarmory.data.MobEquipmentBuilder;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import org.lwjgl.glfw.GLFW;
 
 public class EditScreenMain extends Screen {
     
@@ -67,12 +69,16 @@ public class EditScreenMain extends Screen {
         this.addRenderableWidget(Button.builder(
                 Component.literal("Save"),
                 btn -> {
-                    String initial = entry.fileName != null ? entry.fileName : "";
+                    String initial = this.entry.fileName != null ? this.entry.fileName : "";
                     this.minecraft.setScreen(new TextInputScreen(
                             this,
                             "Save As...",
                             initial,
-                            this::onSaveNameEntered
+                            name -> {
+                                this.entry.fileName = name;
+                                this.saveToFile();
+                                this.minecraft.setScreen(null);
+                            }
                     ));
                 }
         ).bounds(this.width / 2 - 50, this.height - 40, 100, 20).build());
@@ -104,16 +110,27 @@ public class EditScreenMain extends Screen {
                 0xAAAAAA);
     }
     
+    public void saveToFile() {
+        updateBuilder();
+        MobEquipmentBuilder.SaveResult result = builder.createFile(entry.fileName);
+        
+        if (result.success) minecraft.player.displayClientMessage(Component.literal("Saved mob equipment to: " + result.path), false);
+        else minecraft.player.displayClientMessage(Component.literal("Failed to save: " + result.error.getMessage()), false);
+    }
+    
+    
     private void updateBuilder() {
+        
         MobEquipmentBuilder b = MobEquipmentBuilder
                 .mob(entry.mob != null ? entry.mob.toString() : "")
                 .chance(entry.chance);
         
-        for (MobEquipmentReloadListener.DifficultyGroup group : entry.difficultyGroups) {
+        for (MobEquipmentReloadListener.DifficultyGroup difficultyGroup : entry.difficultyGroups) {
+            
             MobEquipmentBuilder.DifficultyGroupBuilder dg = b.difficultyGroup();
             
-            // matchers
-            for (MobEquipmentReloadListener.DifficultyLevel lvl : group.matchers) {
+            //difficulty matchers
+            for (MobEquipmentReloadListener.DifficultyLevel lvl : difficultyGroup.matchers) {
                 switch (lvl) {
                     case EASY -> dg.easy();
                     case NORMAL -> dg.normal();
@@ -123,13 +140,65 @@ public class EditScreenMain extends Screen {
                 }
             }
             
-            // chance override
-            if (group.chance != null) {
-                dg.chance(group.chance);
+            if (EditScreenShared.hasOverride(difficultyGroup.chance)) {
+                dg.chance(difficultyGroup.chance);
             }
             
-            // biome groups (later)
-            // equipment sets (later)
+            //biome groups
+            for (MobEquipmentReloadListener.BiomeGroup biomeGroup : difficultyGroup.biomeGroups) {
+                
+                MobEquipmentBuilder.BiomeGroupBuilder bg = dg.biomeGroup();
+                
+                for (MobEquipmentReloadListener.BiomeMatch match : biomeGroup.matchers) {
+                    bg.match(MobEquipmentReloadListener.biomeMatchToString(match));
+                }
+                
+                if (EditScreenShared.hasOverride(biomeGroup.chance)) {
+                    bg.chance(biomeGroup.chance);
+                }
+                
+                //equipment sets
+                for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
+                    
+                    MobEquipmentBuilder.EquipmentSetBuilder sb = bg.set();
+                    
+                    if (set.name != null) sb.name(set.name);
+                    sb.weight(set.weight);
+                    
+                    //slots
+                    for (var slotEntry : set.slots.entrySet()) {
+                        
+                        String slotName = slotEntry.getKey().getName();
+                        MobEquipmentBuilder.SlotBuilder slb = sb.slot(slotName);
+                        
+                        for (MobEquipmentReloadListener.WeightedItem wi : slotEntry.getValue()) {
+                            
+                            MobEquipmentBuilder.WeightedItemBuilder wib = slb.item(wi.itemId)
+                                    .weight(wi.weight);
+                            
+                            if (wi.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
+                                wib.randomEnchant().power(rnd.power()).endEnchant();
+                            }
+                            
+                            if (wi.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
+                                MobEquipmentBuilder.EnchantBuilder eb = wib.predefinedEnchant();
+                                for (int i = 0; i < pre.ids().size(); i++) {
+                                    eb.addPredefined(pre.ids().get(i), pre.levels().get(i));
+                                }
+                                eb.endEnchant();
+                            }
+                            
+                            wib.endItem();
+                        }
+                        
+                        slb.endSlot();
+                    }
+                    
+                    sb.endSet();
+                }
+                
+                bg.endBiomeGroup();
+            }
             
             dg.endDifficultyGroup();
         }
@@ -137,9 +206,25 @@ public class EditScreenMain extends Screen {
         this.builder = b;
     }
     
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
     
-    private void onSaveNameEntered(String name) {
-        entry.fileName = name;
-        this.minecraft.setScreen(new EditScreenMain(entry));
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.minecraft.setScreen(new ConfirmScreen(
+                    confirmed -> {
+                        if (confirmed) this.minecraft.setScreen(null);
+                        else this.minecraft.setScreen(this);
+                    },
+                    Component.literal("Exit Editor"),
+                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+            ));
+            return true;
+        }
+        
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

@@ -3,8 +3,10 @@ package com.livajq.mobarmory.client.gui.screen;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.function.Consumer;
 
@@ -63,5 +65,27 @@ public class TextInputScreen extends Screen {
         }
         
         super.render(gfx, mouseX, mouseY, partialTick);
+    }
+    
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
+    
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.minecraft.setScreen(new ConfirmScreen(
+                    confirmed -> {
+                        if (confirmed) this.minecraft.setScreen(null);
+                        else this.minecraft.setScreen(this);
+                    },
+                    Component.literal("Exit Editor"),
+                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+            ));
+            return true;
+        }
+        
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

@@ -3,10 +3,12 @@ package com.livajq.mobarmory.client.gui.screen;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
@@ -55,9 +57,7 @@ public class EditScreenDifficultyGroupEntry extends Screen {
         
         this.addRenderableWidget(Button.builder(
                 Component.literal("Biome Groups"),
-                btn -> {
-                    // TODO: open biome group list
-                }
+                btn -> this.minecraft.setScreen(new EditScreenBiomeGroups(main, difficultyGroup))
         ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
         y += 24;
         
@@ -109,7 +109,7 @@ public class EditScreenDifficultyGroupEntry extends Screen {
         int usedHeight = dy;
         
         gfx.drawCenteredString(this.font,
-                "Chance: " + (int)((difficultyGroup.chance == null || difficultyGroup.chance == 0.0F ? main.entry.chance : difficultyGroup.chance) * 100) + "%",
+                "Chance: " + (int)((EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance) * 100) + "%",
                 previewX + PREVIEW_SIZE / 2,
                 infoY + usedHeight + 4,
                 0xAAAAAA);
@@ -120,5 +120,27 @@ public class EditScreenDifficultyGroupEntry extends Screen {
                 infoY + usedHeight + 18,
                 0xAAAAAA);
         
+    }
+    
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
+    
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.minecraft.setScreen(new ConfirmScreen(
+                    confirmed -> {
+                        if (confirmed) this.minecraft.setScreen(null);
+                        else this.minecraft.setScreen(this);
+                    },
+                    Component.literal("Exit Editor"),
+                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+            ));
+            return true;
+        }
+        
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 }

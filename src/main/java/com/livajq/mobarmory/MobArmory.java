@@ -1,6 +1,5 @@
 package com.livajq.mobarmory;
 
-import com.livajq.mobarmory.data.MobEquipmentList;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import com.livajq.mobarmory.handlers.PacketHandler;
 import com.mojang.logging.LogUtils;
@@ -36,7 +35,7 @@ public class MobArmory {
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
             PacketHandler.register();
-            MobEquipmentList.init();
+            //MobEquipmentList.init();
         });
     }
     

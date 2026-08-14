@@ -1,60 +1,57 @@
 package com.livajq.mobarmory.client.gui.screen;
 
-import com.livajq.mobarmory.client.gui.widget.DifficultyGroupList;
+import com.livajq.mobarmory.client.gui.widget.EquipmentSetList;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlot;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.EnumMap;
 
-public class EditScreenDifficultyGroups extends Screen {
+public class EditScreenEquipmentSets extends Screen {
     
     private final EditScreenMain main;
-    private DifficultyGroupList list;
+    private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
+    private final MobEquipmentReloadListener.BiomeGroup biomeGroup;
+    private EquipmentSetList list;
     
     private static final int LEFT_PANEL_WIDTH = 120;
     
-    public EditScreenDifficultyGroups(EditScreenMain main) {
-        super(Component.literal("Difficulty Groups"));
+    public EditScreenEquipmentSets(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup, MobEquipmentReloadListener.BiomeGroup biomeGroup) {
+        super(Component.literal("Equipment Sets"));
         this.main = main;
+        this.difficultyGroup = difficultyGroup;
+        this.biomeGroup = biomeGroup;
     }
     
     @Override
     protected void init() {
+        this.list = new EquipmentSetList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
         
-        this.list = new DifficultyGroupList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
-        
-        for (int i = 0; i < main.entry.difficultyGroups.size(); i++) {
-            MobEquipmentReloadListener.DifficultyGroup group = main.entry.difficultyGroups.get(i);
-            list.children().add(new DifficultyGroupList.Entry(group, main, main.entry.difficultyGroups.get(i).matchers));
+        for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
+            list.children().add(new EquipmentSetList.Entry(set, main, difficultyGroup, biomeGroup));
         }
         
         this.addWidget(list);
         
         this.addRenderableWidget(Button.builder(
-                Component.literal("Add Group"),
+                Component.literal("Add Set"),
                 btn -> {
-                    MobEquipmentReloadListener.DifficultyGroup newGroup =
-                            new MobEquipmentReloadListener.DifficultyGroup(
-                                    new ArrayList<>(List.of(MobEquipmentReloadListener.DifficultyLevel.GLOBAL)),
-                                    0.0F,
-                                    new ArrayList<>(),
-                                    new ArrayList<>()
-                            );
+                    MobEquipmentReloadListener.EquipmentSet newSet =
+                            new MobEquipmentReloadListener.EquipmentSet("Unnamed Set", 1, new EnumMap<>(EquipmentSlot.class));
                     
-                    main.entry.difficultyGroups.add(newGroup);
-                    this.minecraft.setScreen(new EditScreenDifficultyGroupEntry(main, newGroup));
+                    biomeGroup.sets.add(newSet);
+                    this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, newSet));
                 }
         ).bounds(20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
         
         this.addRenderableWidget(Button.builder(
                 Component.literal("Back"),
-                btn -> this.minecraft.setScreen(main)
+                btn -> this.minecraft.setScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, biomeGroup))
         ).bounds(this.width - LEFT_PANEL_WIDTH - 20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
     }
     
@@ -63,7 +60,7 @@ public class EditScreenDifficultyGroups extends Screen {
         this.renderBackground(gfx);
         list.render(gfx, mouseX, mouseY, partialTick);
         super.render(gfx, mouseX, mouseY, partialTick);
-        gfx.drawCenteredString(this.font, "Difficulty groups", this.width / 2, 15, 0xFFFFFF);
+        gfx.drawCenteredString(this.font, "Equipment sets", this.width / 2, 15, 0xFFFFFF);
     }
     
     @Override

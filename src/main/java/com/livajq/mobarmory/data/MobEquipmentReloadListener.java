@@ -5,7 +5,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.livajq.mobarmory.MobArmory;
-import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
@@ -13,7 +12,6 @@ import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.*;
@@ -219,11 +217,17 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         return obj;
     }
     
-    private static String biomeMatchToString(BiomeMatch match) {
+    public static String biomeMatchToString(BiomeMatch match) {
         if (match instanceof BiomeMatch.Global) return "global";
         if (match instanceof BiomeMatch.Tag t) return "#" + t.tag();
         if (match instanceof BiomeMatch.Id i) return i.id().toString();
         throw new IllegalStateException("Unknown BiomeMatch: " + match);
+    }
+  
+    public static BiomeMatch parseBiomeMatch(String raw) {
+        if (raw.equals("global")) return new BiomeMatch.Global();
+        else if (raw.startsWith("#")) return new BiomeMatch.Tag(new ResourceLocation(raw.substring(1)));
+        else return new BiomeMatch.Id(new ResourceLocation(raw));
     }
     
     private static JsonObject toJson(EquipmentSet set) {
@@ -250,8 +254,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         
         //should never be null for a real registered Item, but a config-driven registry lookup
         //failing silently is worse than an obviously-wrong fallback value
-        ResourceLocation itemId = ForgeRegistries.ITEMS.getKey(item.item);
-        obj.addProperty("item", itemId != null ? itemId.toString() : "minecraft:air");
+        obj.addProperty("item", item.itemId);
         obj.addProperty("weight", item.weight);
         
         if (item.enchant != null) obj.add("enchant", toJson(item.enchant));
@@ -269,10 +272,9 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             obj.addProperty("type", "predefined");
             
             JsonArray arr = new JsonArray();
-            for (int i = 0; i < p.enchants().size(); i++) {
+            for (int i = 0; i < p.ids().size(); i++) {
                 JsonObject e = new JsonObject();
-                ResourceLocation id = ForgeRegistries.ENCHANTMENTS.getKey(p.enchants().get(i).value());
-                e.addProperty("id", id != null ? id.toString() : "minecraft:unbreaking");
+                e.addProperty("id", p.ids().get(i));
                 e.addProperty("level", p.levels().get(i));
                 arr.add(e);
             }
@@ -355,6 +357,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     }
     
     private static EquipmentSet parseSet(JsonObject json, ResourceLocation sourceKey) {
+        String name = json.has("name") ? json.get("name").getAsString() : null;
         int weight = GsonHelper.getAsInt(json, "weight", 1);
         Map<EquipmentSlot, List<WeightedItem>> slots = new EnumMap<>(EquipmentSlot.class);
         
@@ -369,12 +372,6 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                 ResourceLocation itemId = new ResourceLocation(GsonHelper.getAsString(obj, "item"));
                 int itemWeight = GsonHelper.getAsInt(obj, "weight", 1);
                 
-                Item item = ForgeRegistries.ITEMS.getValue(itemId);
-                if (item == null) {
-                    MobArmory.LOGGER.warn("Unknown item {} in mob_equipment entry {}", itemId, sourceKey);
-                    continue;
-                }
-                
                 EnchantData enchant = null;
                 
                 //optional enchants added per item, either randomly with specified enchanting power or predefined
@@ -388,36 +385,31 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                     }
                     
                     else if (type.equals("predefined")) {
-                        List<Holder<Enchantment>> enchants = new ArrayList<>();
+                        List<String> ids = new ArrayList<>();
                         List<Integer> levels = new ArrayList<>();
                         
                         JsonArray list = ench.getAsJsonArray("list");
                         for (JsonElement enchEl : list) {
                             JsonObject enchObj = enchEl.getAsJsonObject();
-                            ResourceLocation enchId = new ResourceLocation(GsonHelper.getAsString(enchObj, "id"));
+                            String enchId = GsonHelper.getAsString(enchObj, "id");
                             int level = GsonHelper.getAsInt(enchObj, "level");
                             
-                            Holder<Enchantment> holder = ForgeRegistries.ENCHANTMENTS.getHolder(enchId).orElse(null);
-                            if (holder == null) {
-                                MobArmory.LOGGER.warn("Unknown enchantment {} in {}", enchId, sourceKey);
-                                continue;
-                            }
-                            
-                            enchants.add(holder);
+                            ids.add(enchId);
                             levels.add(level);
                         }
                         
-                        enchant = new EnchantData.Predefined(enchants, levels);
+                        enchant = new EnchantData.Predefined(ids, levels);
                     }
                 }
                 
-                items.add(new WeightedItem(item, itemWeight, enchant));
+                String rawId = GsonHelper.getAsString(obj, "item");
+                items.add(new WeightedItem(rawId, itemWeight, enchant));
             }
             
             if (!items.isEmpty()) slots.put(slotKey.getValue(), items);
         }
         
-        return new EquipmentSet(weight, slots);
+        return new EquipmentSet(name, weight, slots);
     }
     
     public static class MobEquipmentEntry {
@@ -504,28 +496,35 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     }
     
     public static class WeightedItem {
+        public String itemId;
         public Item item;
         public int weight;
         public EnchantData enchant;
         
-        public WeightedItem(Item item, int weight, EnchantData enchant) {
-            this.item = item;
+        public WeightedItem(String itemId, int weight, EnchantData enchant) {
+            this.itemId = itemId;
             this.weight = weight;
             this.enchant = enchant;
+            this.item = null;
+        }
+        
+        public void resolve() {
+            this.item = ForgeRegistries.ITEMS.getValue(new ResourceLocation(itemId));
         }
     }
     
     public sealed interface EnchantData {
         record Random(int power) implements EnchantData {}
-        record Predefined(List<Holder<Enchantment>> enchants, List<Integer> levels) implements EnchantData {}
+        record Predefined(List<String> ids, List<Integer> levels) implements EnchantData {}
     }
     
     public static class EquipmentSet {
+        public String name;
         public int weight;
         public Map<EquipmentSlot, List<WeightedItem>> slots;
         
-        public EquipmentSet(int weight,
-                            Map<EquipmentSlot, List<WeightedItem>> slots) {
+        public EquipmentSet(String name, int weight, Map<EquipmentSlot, List<WeightedItem>> slots) {
+            this.name = name;
             this.weight = weight;
             this.slots = slots;
         }

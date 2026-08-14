@@ -1,5 +1,6 @@
 package com.livajq.mobarmory.handlers;
 
+import com.livajq.mobarmory.Config;
 import com.livajq.mobarmory.MobArmory;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.core.Holder;
@@ -7,7 +8,10 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
@@ -23,6 +27,7 @@ public class EquipmentHandler {
     
     @SubscribeEvent
     public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (!Config.enabled) return;
         if (!(event.getEntity() instanceof Mob mob)) return;
         if (event.getLevel().isClientSide()) return;
         if (event.loadedFromDisk()) return;
@@ -115,9 +120,8 @@ public class EquipmentHandler {
         }
         
         //most specific chance wins: biome group > difficulty group > mob-level default
-        float effectiveChance = biomeGroupChance != null ? biomeGroupChance
-                : chosenDifficultyGroup.chance != null ? chosenDifficultyGroup.chance
-                : entry.chance;
+        float effectiveChance = hasOverride(biomeGroupChance) ? biomeGroupChance :
+                        hasOverride(chosenDifficultyGroup.chance) ? chosenDifficultyGroup.chance : entry.chance;
         
         if (mob.getRandom().nextFloat() > effectiveChance) return;
         
@@ -130,7 +134,10 @@ public class EquipmentHandler {
                     pickWeightedItem(slotEntry.getValue(), mob.getRandom());
             
             if (chosen != null) {
-                ItemStack stack = new ItemStack(chosen.item);
+                chosen.resolve();
+                
+                Item actual = chosen.item != null ? chosen.item : Items.AIR;
+                ItemStack stack = new ItemStack(actual);
                 
                 //random enchants
                 if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
@@ -139,14 +146,20 @@ public class EquipmentHandler {
                 
                 //predefined enchants
                 if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
-                    for (int i = 0; i < pre.enchants().size(); i++) {
-                        stack.enchant(pre.enchants().get(i).value(), pre.levels().get(i));
+                    for (int i = 0; i < pre.ids().size(); i++) {
+                        ResourceLocation id = new ResourceLocation(pre.ids().get(i));
+                        Holder<Enchantment> holder = ForgeRegistries.ENCHANTMENTS.getHolder(id).orElse(null);
+                        if (holder != null) stack.enchant(holder.value(), pre.levels().get(i));
                     }
                 }
                 
                 mob.setItemSlot(slotEntry.getKey(), stack);
             }
         }
+    }
+    
+    private static boolean hasOverride(Float value) {
+        return value != null && value != 0.0F;
     }
     
     //hardcore worlds are always forced to HARD difficulty, but "hardcore" as a matcher is treated

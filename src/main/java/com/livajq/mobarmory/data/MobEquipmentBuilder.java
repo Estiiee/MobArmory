@@ -8,7 +8,6 @@ import com.livajq.mobarmory.Config;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.fml.loading.FMLPaths;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -38,16 +37,17 @@ public class MobEquipmentBuilder {
         return g;
     }
     
-    public void createFile(String fileName) {
+    public SaveResult createFile(String fileName) {
+        Path dir = FMLPaths.GAMEDIR.get().resolve(Config.outputDirectory).normalize();
+        Path file = dir.resolve(fileName + ".json").normalize();
+        
         try {
             JsonObject json = buildJson();
             
-            Path dir = FMLPaths.GAMEDIR.get().resolve(Config.outputDirectory).normalize();
             Files.createDirectories(dir);
             
-            Path file = dir.resolve(fileName + ".json").normalize();
             if (!file.startsWith(dir)) {
-                throw new IllegalArgumentException("Invalid file name: " + fileName);
+                return new SaveResult(false, file, new IllegalArgumentException("Invalid file name"));
             }
             
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -55,8 +55,10 @@ public class MobEquipmentBuilder {
             
             Files.writeString(file, jsonString, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create mob equipment file: " + fileName, e);
+            return new SaveResult(true, file, null);
+            
+        } catch (Exception e) {
+            return new SaveResult(false, file, e);
         }
     }
     
@@ -238,6 +240,7 @@ public class MobEquipmentBuilder {
         
         private final BiomeGroupBuilder parentBiome;
         
+        String name = null;
         private int weight = 1;
         
         //slotName -> list of WeightedItemBuilder
@@ -246,6 +249,11 @@ public class MobEquipmentBuilder {
         //biome group set
         public EquipmentSetBuilder(BiomeGroupBuilder parentBiome) {
             this.parentBiome = parentBiome;
+        }
+        
+        public EquipmentSetBuilder name(String name) {
+            this.name = name;
+            return this;
         }
         
         public EquipmentSetBuilder weight(int w) {
@@ -265,6 +273,8 @@ public class MobEquipmentBuilder {
         
         public JsonObject toJson() {
             JsonObject obj = new JsonObject();
+            
+            if (name != null) obj.addProperty("name", name);
             obj.addProperty("weight", weight);
             
             // Serialize slots
@@ -411,4 +421,17 @@ public class MobEquipmentBuilder {
             return obj;
         }
     }
+    
+    public static class SaveResult {
+        public final boolean success;
+        public final Path path;
+        public final Exception error;
+        
+        public SaveResult(boolean success, Path path, Exception error) {
+            this.success = success;
+            this.path = path;
+            this.error = error;
+        }
+    }
+    
 }

@@ -171,6 +171,7 @@ public class MobEquipmentList {
                 .difficultyGroup().match("easy")
                 .biomeGroup().global()
                 .set()
+                .name("random set whatever")
                 .slot("mainhand").item("minecraft:grass_block").endItem().endSlot()
                 .endSet()
                 .endBiomeGroup()

@@ -13,7 +13,7 @@ public final class EditScreenShared {
         gfx.drawCenteredString(font, fileLabel, screenWidth / 2, 15, 0xFFFFFF);
         
         // --- SCREEN NAME UNDER FILE NAME ---
-        gfx.drawCenteredString(font, screenName, screenWidth / 2, 30, 0xAAAAAA);
+        gfx.drawCenteredString(font, screenName, screenWidth / 2, 30, 0x55FF55);
         
         // --- RIGHT SIDE PREVIEW PANEL ---
         int previewX = screenWidth - previewSize - 20;
@@ -27,5 +27,9 @@ public final class EditScreenShared {
                 previewX + previewSize / 2,
                 previewY + previewSize / 2 - 4,
                 0xFFFFFF);
+    }
+    
+    public static boolean hasOverride(Float value) {
+        return value != null && value != 0.0F;
     }
 }

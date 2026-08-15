@@ -110,8 +110,13 @@ public class EditScreenWeightedItemEntry extends Screen {
         this.renderBackground(gfx);
         super.render(gfx, mouseX, mouseY, partialTick);
         
-        EditScreenShared.renderHeader(gfx, this.font, main.entry, this.width, PREVIEW_SIZE,
-                EditScreenSlots.slotLabel(slot) + " item");
+        EditScreenShared.renderHeader(gfx, font, main.entry, width, PREVIEW_SIZE, List.of(
+                EditScreenShared.crumbMain(main.entry),
+                EditScreenShared.crumbDifficultyGroup(main, difficultyGroup),
+                EditScreenShared.crumbBiomeGroup(main, difficultyGroup, biomeGroup),
+                EditScreenShared.crumbSet(main, difficultyGroup, biomeGroup, set),
+                EditScreenShared.crumbSlot(main, difficultyGroup, biomeGroup, set, slot),
+                EditScreenShared.current(EditScreenSlots.slotLabel(slot) + " item")));
         
         int previewX = this.width - PREVIEW_SIZE - 20;
         int infoY = 60 + PREVIEW_SIZE + 12;
@@ -168,5 +173,30 @@ public class EditScreenWeightedItemEntry extends Screen {
         }
         
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return true;
+        if (EditScreenShared.mouseClicked(mouseX, mouseY, button)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (EditScreenShared.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+    
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (EditScreenShared.mouseReleased(mouseX, mouseY, button)) return true;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (EditScreenShared.mouseScrolled(mouseX, mouseY, delta)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 }

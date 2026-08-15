@@ -11,6 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.List;
+
 public class EditScreenMain extends Screen {
     
     public final MobEquipmentReloadListener.MobEquipmentEntry entry;
@@ -28,6 +30,7 @@ public class EditScreenMain extends Screen {
     
     @Override
     protected void init() {
+        EditScreenShared.rebuildPreviewEntity(entry, this.minecraft.level);
         
         // --- LEFT SIDE BUTTONS ---
         int leftX = 20;
@@ -40,6 +43,7 @@ public class EditScreenMain extends Screen {
                         try {
                             entry.mob = new ResourceLocation(value);
                             updateBuilder();
+                            EditScreenShared.rebuildPreviewEntity(entry, this.minecraft.level);
                         } catch (Exception ignored) {}
                     }));
                 }
@@ -89,7 +93,8 @@ public class EditScreenMain extends Screen {
         this.renderBackground(gfx);
         super.render(gfx, mouseX, mouseY, partialTick);
         
-        EditScreenShared.renderHeader(gfx, font, entry, width, PREVIEW_SIZE, "Main");
+        EditScreenShared.renderHeader(gfx, font, entry, width, PREVIEW_SIZE,
+                List.of(EditScreenShared.current("Main")));
         
         int infoX = this.width - PREVIEW_SIZE - 20 + PREVIEW_SIZE / 2;
         int infoY = 60 + PREVIEW_SIZE;
@@ -226,5 +231,30 @@ public class EditScreenMain extends Screen {
         }
         
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return true;
+        if (EditScreenShared.mouseClicked(mouseX, mouseY, button)) return true;
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (EditScreenShared.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+    
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (EditScreenShared.mouseReleased(mouseX, mouseY, button)) return true;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+    
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (EditScreenShared.mouseScrolled(mouseX, mouseY, delta)) return true;
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 }

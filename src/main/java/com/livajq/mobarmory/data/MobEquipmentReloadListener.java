@@ -369,7 +369,6 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             
             for (JsonElement el : arr) {
                 JsonObject obj = el.getAsJsonObject();
-                ResourceLocation itemId = new ResourceLocation(GsonHelper.getAsString(obj, "item"));
                 int itemWeight = GsonHelper.getAsInt(obj, "weight", 1);
                 
                 EnchantData enchant = null;

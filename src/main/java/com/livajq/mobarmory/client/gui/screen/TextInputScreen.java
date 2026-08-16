@@ -34,6 +34,7 @@ public class TextInputScreen extends Screen {
         int h = 20;
         
         box = new EditBox(this.font, this.width / 2 - w / 2, this.height / 2 - 10, w, h, Component.literal(""));
+        box.setMaxLength(256);
         box.setValue(initialText == null ? "" : initialText);
         this.addRenderableWidget(box);
         

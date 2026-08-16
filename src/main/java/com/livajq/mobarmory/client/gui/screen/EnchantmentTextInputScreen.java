@@ -43,6 +43,7 @@ public class EnchantmentTextInputScreen extends Screen {
         int y = this.height / 2 - 30;
         
         idBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("ID"));
+        idBox.setMaxLength(256);
         idBox.setValue(initialId);
         this.addRenderableWidget(idBox);
         

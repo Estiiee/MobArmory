@@ -70,6 +70,61 @@ public class EditScreenEquipmentSetEntry extends Screen {
         y += 24;
         
         this.addRenderableWidget(Button.builder(
+                Component.literal("Mob NBT"),
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this, "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')", set.mobNbt != null ? set.mobNbt : "",
+                        value -> {
+                            set.mobNbt = value.isBlank() ? null : value;
+                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                        },
+                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true
+                ))
+        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        y += 24;
+        
+        this.addRenderableWidget(Button.builder(
+                Component.literal("Potion Effects (" + set.potionEffects.size() + ")"),
+                btn -> this.minecraft.setScreen(new EditScreenPotionEffects(main, difficultyGroup, biomeGroup, set))
+        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        y += 24;
+        
+        this.addRenderableWidget(Button.builder(
+                Component.literal("Time of Day"),
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this, "Time of Day (e.g. 18:00-6:00, blank = always)",
+                        MobEquipmentReloadListener.isTimeUnrestricted(set.timeOfDay) ? "" : MobEquipmentReloadListener.timeRangeToString(set.timeOfDay),
+                        value -> {
+                            try {
+                                set.timeOfDay = value.isBlank()
+                                        ? new MobEquipmentReloadListener.TimeRange(0, 24000)
+                                        : MobEquipmentReloadListener.parseTimeRange(value);
+                            } catch (Exception ignored) {}
+                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                        },
+                        EditScreenShared::timeRangeValid, "Warning: invalid format (use HH:MM-HH:MM)", true
+                ))
+        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        y += 24;
+        
+        this.addRenderableWidget(Button.builder(
+                Component.literal("Y Level"),
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this, "Y Level (e.g. <64, >=0, 40; blank = always)",
+                        MobEquipmentReloadListener.isYLevelUnrestricted(set.yLevel) ? "" : MobEquipmentReloadListener.yLevelToString(set.yLevel),
+                        value -> {
+                            try {
+                                set.yLevel = value.isBlank()
+                                        ? new MobEquipmentReloadListener.YLevelCondition(MobEquipmentReloadListener.YComparator.LT, 350)
+                                        : MobEquipmentReloadListener.parseYLevel(value);
+                            } catch (Exception ignored) {}
+                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                        },
+                        EditScreenShared::yLevelValid, "Warning: invalid format (e.g. <64, >=0, 40)", true
+                ))
+        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        y += 24;
+        
+        this.addRenderableWidget(Button.builder(
                 Component.literal("Delete Set"),
                 btn -> {
                     biomeGroup.sets.remove(set);

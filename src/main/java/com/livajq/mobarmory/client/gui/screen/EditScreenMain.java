@@ -38,15 +38,17 @@ public class EditScreenMain extends Screen {
         
         this.addRenderableWidget(Button.builder(
                 Component.literal("Mob ID"),
-                btn -> {
-                    this.minecraft.setScreen(new TextInputScreen(this, "Set Mob ID", entry.mob != null ? entry.mob.toString() : "", value -> {
-                        try {
-                            entry.mob = new ResourceLocation(value);
-                            updateBuilder();
-                            EditScreenShared.rebuildPreviewEntity(entry, this.minecraft.level);
-                        } catch (Exception ignored) {}
-                    }));
-                }
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this, "Set Mob ID", entry.mob != null ? entry.mob.toString() : "",
+                        value -> {
+                            try {
+                                entry.mob = new ResourceLocation(value);
+                                updateBuilder();
+                                EditScreenShared.rebuildPreviewEntity(entry, this.minecraft.level);
+                            } catch (Exception ignored) {}
+                        },
+                        EditScreenShared::mobExists, "Warning: entity type not found", false
+                ))
         ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
         y += 24;
         
@@ -123,7 +125,6 @@ public class EditScreenMain extends Screen {
         else minecraft.player.displayClientMessage(Component.literal("Failed to save: " + result.error.getMessage()), false);
     }
     
-    
     private void updateBuilder() {
         
         MobEquipmentBuilder b = MobEquipmentBuilder
@@ -134,7 +135,6 @@ public class EditScreenMain extends Screen {
             
             MobEquipmentBuilder.DifficultyGroupBuilder dg = b.difficultyGroup();
             
-            //difficulty matchers
             for (MobEquipmentReloadListener.DifficultyLevel lvl : difficultyGroup.matchers) {
                 switch (lvl) {
                     case EASY -> dg.easy();
@@ -149,7 +149,6 @@ public class EditScreenMain extends Screen {
                 dg.chance(difficultyGroup.chance);
             }
             
-            //biome groups
             for (MobEquipmentReloadListener.BiomeGroup biomeGroup : difficultyGroup.biomeGroups) {
                 
                 MobEquipmentBuilder.BiomeGroupBuilder bg = dg.biomeGroup();
@@ -162,7 +161,6 @@ public class EditScreenMain extends Screen {
                     bg.chance(biomeGroup.chance);
                 }
                 
-                //equipment sets
                 for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
                     
                     MobEquipmentBuilder.EquipmentSetBuilder sb = bg.set();
@@ -170,7 +168,6 @@ public class EditScreenMain extends Screen {
                     if (set.name != null) sb.name(set.name);
                     sb.weight(set.weight);
                     
-                    //slots
                     for (var slotEntry : set.slots.entrySet()) {
                         
                         String slotName = slotEntry.getKey().getName();
@@ -180,6 +177,8 @@ public class EditScreenMain extends Screen {
                             
                             MobEquipmentBuilder.WeightedItemBuilder wib = slb.item(wi.itemId)
                                     .weight(wi.weight);
+                            
+                            if (wi.nbt != null) wib.nbt(wi.nbt);
                             
                             if (wi.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
                                 wib.randomEnchant().power(rnd.power()).endEnchant();
@@ -198,6 +197,18 @@ public class EditScreenMain extends Screen {
                         
                         slb.endSlot();
                     }
+                    
+                    if (set.mobNbt != null) sb.mobNbt(set.mobNbt);
+                    
+                    for (MobEquipmentReloadListener.PotionEffectEntry pe : set.potionEffects) {
+                        sb.potionEffect(pe.effectId, pe.durationTicks, pe.amplifier);
+                    }
+                    
+                    boolean timeUnrestricted = set.timeOfDay.minTicks == 0 && set.timeOfDay.maxTicks == 24000;
+                    if (!timeUnrestricted) sb.timeOfDay(set.timeOfDay.minTicks, set.timeOfDay.maxTicks);
+                    
+                    boolean yUnrestricted = set.yLevel.comparator == MobEquipmentReloadListener.YComparator.LT && set.yLevel.value == 350;
+                    if (!yUnrestricted) sb.yLevel(set.yLevel.comparator.symbol, set.yLevel.value);
                     
                     sb.endSet();
                 }

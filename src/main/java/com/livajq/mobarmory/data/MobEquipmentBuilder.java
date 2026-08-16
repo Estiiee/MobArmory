@@ -240,8 +240,13 @@ public class MobEquipmentBuilder {
         
         private final BiomeGroupBuilder parentBiome;
         
-        String name = null;
+        private String name = null;
         private int weight = 1;
+        private String mobNbt = null;
+        private final List<PotionEffectBuilder> potionEffects = new ArrayList<>();
+        private long timeOfDayMin = -1, timeOfDayMax = -1; // -1 = unset
+        private String yComparator = null;
+        private Integer yValue = null;
         
         //slotName -> list of WeightedItemBuilder
         private final Map<String, List<WeightedItemBuilder>> slots = new HashMap<>();
@@ -267,6 +272,28 @@ public class MobEquipmentBuilder {
             return new SlotBuilder(this, list);
         }
         
+        public EquipmentSetBuilder mobNbt(String nbt) {
+            this.mobNbt = nbt;
+            return this;
+        }
+        
+        public EquipmentSetBuilder potionEffect(String effectId, int durationTicks, int amplifier) {
+            potionEffects.add(new PotionEffectBuilder(effectId, durationTicks, amplifier));
+            return this;
+        }
+        
+        public EquipmentSetBuilder timeOfDay(long min, long max) {
+            this.timeOfDayMin = min;
+            this.timeOfDayMax = max;
+            return this;
+        }
+        
+        public EquipmentSetBuilder yLevel(String comparator, int value) {
+            this.yComparator = comparator;
+            this.yValue = value;
+            return this;
+        }
+        
         public BiomeGroupBuilder endSet() {
             return parentBiome;
         }
@@ -290,7 +317,48 @@ public class MobEquipmentBuilder {
                 obj.add(slotName, arr);
             }
             
+            if (mobNbt != null) obj.addProperty("mob_nbt", mobNbt);
+            
+            if (!potionEffects.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (PotionEffectBuilder pe : potionEffects) arr.add(pe.toJson());
+                obj.add("potion_effects", arr);
+            }
+            
+            if (timeOfDayMin >= 0) {
+                JsonObject t = new JsonObject();
+                t.addProperty("min", timeOfDayMin);
+                t.addProperty("max", timeOfDayMax);
+                obj.add("time_of_day", t);
+            }
+            
+            if (yComparator != null) {
+                JsonObject y = new JsonObject();
+                y.addProperty("comparator", yComparator);
+                y.addProperty("value", yValue);
+                obj.add("y_level", y);
+            }
+            
             return obj;
+        }
+    }
+    
+    private static class PotionEffectBuilder {
+        private final String effectId;
+        private final int duration, amplifier;
+        
+        PotionEffectBuilder(String effectId, int duration, int amplifier) {
+            this.effectId = effectId;
+            this.duration = duration;
+            this.amplifier = amplifier;
+        }
+        
+        JsonObject toJson() {
+            JsonObject o = new JsonObject();
+            o.addProperty("effect", effectId);
+            o.addProperty("duration", duration);
+            o.addProperty("amplifier", amplifier);
+            return o;
         }
     }
     
@@ -321,6 +389,7 @@ public class MobEquipmentBuilder {
         
         private final String itemId;
         private int weight = 1;
+        private String nbt = null;
         
         private EnchantBuilder enchantBuilder = null;
         
@@ -331,6 +400,11 @@ public class MobEquipmentBuilder {
         
         public WeightedItemBuilder weight(int w) {
             this.weight = w;
+            return this;
+        }
+        
+        public WeightedItemBuilder nbt(String nbt) {
+            this.nbt = nbt;
             return this;
         }
         
@@ -354,9 +428,8 @@ public class MobEquipmentBuilder {
             obj.addProperty("item", itemId);
             obj.addProperty("weight", weight);
             
-            if (enchantBuilder != null) {
-                obj.add("enchant", enchantBuilder.toJson());
-            }
+            if (enchantBuilder != null) obj.add("enchant", enchantBuilder.toJson());
+            if (nbt != null) obj.addProperty("nbt", nbt);
             
             return obj;
         }

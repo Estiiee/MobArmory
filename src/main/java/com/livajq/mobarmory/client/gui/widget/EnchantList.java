@@ -72,11 +72,7 @@ public class EnchantList extends ObjectSelectionList<EnchantList.Entry> {
             );
             
             mc.setScreen(new EnchantmentTextInputScreen(
-                    parent,
-                    "Edit Enchant",
-                    id,
-                    String.valueOf(level),
-                    
+                    parent, "Edit Enchant", id, String.valueOf(level),
                     (newId, newLevelStr) -> {
                         try {
                             int newLevel = Math.max(1, Integer.parseInt(newLevelStr));
@@ -84,11 +80,12 @@ public class EnchantList extends ObjectSelectionList<EnchantList.Entry> {
                             p.levels().set(index, newLevel);
                         } catch (Exception ignored) {}
                     },
-                    
                     () -> {
                         p.ids().remove(index);
                         p.levels().remove(index);
-                    }
+                    },
+                    EditScreenShared::enchantExists,
+                    "Warning: enchantment not found"
             ));
             
             return true;

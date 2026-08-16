@@ -1,5 +1,6 @@
 package com.livajq.mobarmory.client.gui.screen;
 
+import com.livajq.mobarmory.client.gui.widget.TriStringConsumer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -8,56 +9,47 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.function.BiConsumer;
-import java.util.function.Predicate;
-
-public class EnchantmentTextInputScreen extends Screen {
+public class PotionEffectTextInputScreen extends Screen {
     
     private final Screen parent;
     private final String title;
-    private final String initialId;
-    private final String initialLevel;
-    private final BiConsumer<String, String> onDone;
+    private final String initialId, initialDuration, initialAmplifier;
+    private final TriStringConsumer onDone;
     private final Runnable onDelete;
-    private final Predicate<String> idValidator; // nullable
-    private final String invalidMessage;
     
-    private EditBox idBox;
-    private EditBox levelBox;
+    private EditBox idBox, durationBox, amplifierBox;
     
-    public EnchantmentTextInputScreen(Screen parent, String title, String initialId, String initialLevel,
-                                      BiConsumer<String, String> onDone, Runnable onDelete) {
-        this(parent, title, initialId, initialLevel, onDone, onDelete, null, null);
-    }
-    
-    public EnchantmentTextInputScreen(Screen parent, String title, String initialId, String initialLevel,
-                                      BiConsumer<String, String> onDone, Runnable onDelete,
-                                      Predicate<String> idValidator, String invalidMessage) {
+    public PotionEffectTextInputScreen(Screen parent, String title, String initialId, String initialDuration,
+                                       String initialAmplifier, TriStringConsumer onDone, Runnable onDelete) {
         super(Component.literal(title));
         this.parent = parent;
         this.title = title;
         this.initialId = initialId;
-        this.initialLevel = initialLevel;
+        this.initialDuration = initialDuration;
+        this.initialAmplifier = initialAmplifier;
         this.onDone = onDone;
         this.onDelete = onDelete;
-        this.idValidator = idValidator;
-        this.invalidMessage = invalidMessage;
     }
     
     @Override
     protected void init() {
         int centerX = this.width / 2;
-        int y = this.height / 2 - 30;
+        int y = this.height / 2 - 50;
         
-        idBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("ID"));
+        idBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("Effect ID"));
         idBox.setMaxLength(256);
         idBox.setValue(initialId);
         this.addRenderableWidget(idBox);
         y += 30;
         
-        levelBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("Level"));
-        levelBox.setValue(initialLevel);
-        this.addRenderableWidget(levelBox);
+        durationBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("Duration"));
+        durationBox.setValue(initialDuration);
+        this.addRenderableWidget(durationBox);
+        y += 30;
+        
+        amplifierBox = new EditBox(this.font, centerX - 100, y, 200, 20, Component.literal("Amplifier"));
+        amplifierBox.setValue(initialAmplifier);
+        this.addRenderableWidget(amplifierBox);
         y += 40;
         
         this.addRenderableWidget(Button.builder(
@@ -65,7 +57,7 @@ public class EnchantmentTextInputScreen extends Screen {
                 btn -> {
                     String idVal = idBox.getValue().trim();
                     if (!idVal.contains(":")) idVal = "minecraft:" + idVal;
-                    onDone.accept(idVal, levelBox.getValue().trim());
+                    onDone.accept(idVal, durationBox.getValue().trim(), amplifierBox.getValue().trim());
                     this.minecraft.setScreen(parent);
                 }).bounds(centerX - 40, y, 80, 20).build());
         
@@ -86,17 +78,14 @@ public class EnchantmentTextInputScreen extends Screen {
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(gfx);
         super.render(gfx, mouseX, mouseY, partialTick);
+        gfx.drawCenteredString(this.font, title, this.width / 2, this.height / 2 - 70, 0xFFFFFF);
         
-        gfx.drawCenteredString(this.font, title, this.width / 2, this.height / 2 - 60, 0xFFFFFF);
-        
-        if (idValidator != null && idBox != null && !idBox.getValue().isBlank() && !idValidator.test(normalizedId())) {
-            gfx.drawCenteredString(this.font, invalidMessage, this.width / 2, this.height / 2 - 45, 0xFF5555);
+        if (idBox != null && !idBox.getValue().isBlank()) {
+            String normalized = idBox.getValue().trim().contains(":") ? idBox.getValue().trim() : "minecraft:" + idBox.getValue().trim();
+            if (!EditScreenShared.effectExists(normalized)) {
+                gfx.drawCenteredString(this.font, "Warning: effect not found", this.width / 2, this.height / 2 - 55, 0xFF5555);
+            }
         }
-    }
-    
-    private String normalizedId() {
-        String raw = idBox.getValue().trim();
-        return raw.contains(":") ? raw : "minecraft:" + raw;
     }
     
     @Override

@@ -7,6 +7,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -15,6 +17,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.joml.Quaternionf;
@@ -145,12 +148,74 @@ public final class EditScreenShared {
         return false;
     }
     
+    public static boolean itemExists(String rawId) {
+        ResourceLocation rl = ResourceLocation.tryParse(rawId);
+        return rl != null && ForgeRegistries.ITEMS.containsKey(rl);
+    }
+    
+    public static boolean mobExists(String rawId) {
+        ResourceLocation rl = ResourceLocation.tryParse(rawId);
+        return rl != null && ForgeRegistries.ENTITY_TYPES.containsKey(rl);
+    }
+    
+    public static boolean enchantExists(String rawId) {
+        ResourceLocation rl = ResourceLocation.tryParse(rawId);
+        return rl != null && ForgeRegistries.ENCHANTMENTS.containsKey(rl);
+    }
+    
+    public static boolean timeValid(String raw) {
+        try {
+            MobEquipmentReloadListener.timeStringToTicks(raw);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    public static boolean nbtValid(String raw) {
+        if (raw == null || raw.isBlank()) return true; //empty = no nbt, always valid
+        try {
+            String wrapped = raw.trim().startsWith("{") ? raw.trim() : "{" + raw.trim() + "}";
+            TagParser.parseTag(wrapped);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    public static boolean timeRangeValid(String raw) {
+        try { MobEquipmentReloadListener.parseTimeRange(raw); return true; }
+        catch (Exception e) { return false; }
+    }
+    
+    public static boolean yLevelValid(String raw) {
+        try { MobEquipmentReloadListener.parseYLevel(raw); return true; }
+        catch (Exception e) { return false; }
+    }
+    
+    public static boolean effectExists(String rawId) {
+        ResourceLocation rl = ResourceLocation.tryParse(rawId);
+        return rl != null && ForgeRegistries.MOB_EFFECTS.containsKey(rl);
+    }
+    
+    public static boolean biomeMatchValid(String raw) {
+        if (raw.equals("global")) return true;
+        
+        String idPart = raw.startsWith("#") ? raw.substring(1) : raw;
+        ResourceLocation rl = ResourceLocation.tryParse(idPart);
+        if (rl == null) return false;
+
+        if (raw.startsWith("#")) return true;
+        
+        ClientLevel level = Minecraft.getInstance().level;
+        if (level == null) return true;
+        
+        return level.registryAccess().registryOrThrow(Registries.BIOME).containsKey(rl);
+    }
+    
     private static void applySetToPreview(MobEquipmentReloadListener.EquipmentSet set) {
         if (previewEntity == null) return;
-        
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            previewEntity.setItemSlot(slot, ItemStack.EMPTY);
-        }
+        for (EquipmentSlot slot : EquipmentSlot.values()) previewEntity.setItemSlot(slot, ItemStack.EMPTY);
         if (set == null) return;
         
         for (var slotEntry : set.slots.entrySet()) {
@@ -160,7 +225,8 @@ public final class EditScreenShared {
             MobEquipmentReloadListener.WeightedItem chosen = pickWeightedItem(items);
             ResourceLocation rl = ResourceLocation.tryParse(chosen.itemId);
             Item item = rl != null ? ForgeRegistries.ITEMS.getValue(rl) : null;
-            if (item != null) previewEntity.setItemSlot(slotEntry.getKey(), new ItemStack(item));
+            if (item == null) item = Items.BARRIER; //stands out as "this id didn't resolve"
+            previewEntity.setItemSlot(slotEntry.getKey(), new ItemStack(item));
         }
     }
     

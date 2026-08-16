@@ -46,20 +46,29 @@ public class EditScreenWeightedItemEntry extends Screen {
                 btn -> {
                     String currentId = item.itemId;
                     this.minecraft.setScreen(new TextInputScreen(
-                            this,
-                            "Set Item (e.g. minecraft:iron_sword)",
-                            currentId != null ? currentId.toString() : "",
+                            this, "Set Item (e.g. minecraft:iron_sword)", item.itemId != null ? item.itemId : "",
                             value -> {
-                                try {
-                                    String raw = value.trim();
-                                    if (!raw.contains(":")) raw = "minecraft:" + raw;
-                                    
-                                    item.itemId = raw;
-                                } catch (Exception ignored) {}
+                                String raw = value.trim();
+                                if (!raw.contains(":")) raw = "minecraft:" + raw;
+                                item.itemId = raw;
                                 this.minecraft.setScreen(new EditScreenWeightedItemEntry(main, difficultyGroup, biomeGroup, set, slot, item));
-                            }
+                            },
+                            EditScreenShared::itemExists, "Warning: item not found", false
                     ));
                 }
+        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        y += 24;
+        
+        this.addRenderableWidget(Button.builder(
+                Component.literal("NBT"),
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this, "Item NBT (e.g. DifficultyMode: \"expert\")", item.nbt != null ? item.nbt : "",
+                        value -> {
+                            item.nbt = value.isBlank() ? null : value;
+                            this.minecraft.setScreen(new EditScreenWeightedItemEntry(main, difficultyGroup, biomeGroup, set, slot, item));
+                        },
+                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true
+                ))
         ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
         y += 24;
         

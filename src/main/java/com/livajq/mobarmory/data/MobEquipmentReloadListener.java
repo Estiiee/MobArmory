@@ -232,6 +232,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     
     private static JsonObject toJson(EquipmentSet set) {
         JsonObject obj = new JsonObject();
+        if (set.name != null) obj.addProperty("name", set.name);
         obj.addProperty("weight", set.weight);
         
         for (var slotEntry : set.slots.entrySet()) {
@@ -246,19 +247,45 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             obj.add(slotKey, arr);
         }
         
+        if (set.mobNbt != null) obj.addProperty("mob_nbt", set.mobNbt);
+        
+        if (!set.potionEffects.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (PotionEffectEntry pe : set.potionEffects) {
+                JsonObject o = new JsonObject();
+                o.addProperty("effect", pe.effectId);
+                o.addProperty("duration", pe.durationTicks);
+                o.addProperty("amplifier", pe.amplifier);
+                arr.add(o);
+            }
+            obj.add("potion_effects", arr);
+        }
+        
+        boolean timeUnrestricted = set.timeOfDay.minTicks == 0 && set.timeOfDay.maxTicks == 24000;
+        if (!timeUnrestricted) {
+            JsonObject t = new JsonObject();
+            t.addProperty("min", set.timeOfDay.minTicks);
+            t.addProperty("max", set.timeOfDay.maxTicks);
+            obj.add("time_of_day", t);
+        }
+        
+        boolean yUnrestricted = set.yLevel.comparator == YComparator.LT && set.yLevel.value == 350;
+        if (!yUnrestricted) {
+            JsonObject y = new JsonObject();
+            y.addProperty("comparator", set.yLevel.comparator.symbol);
+            y.addProperty("value", set.yLevel.value);
+            obj.add("y_level", y);
+        }
+        
         return obj;
     }
     
     private static JsonObject toJson(WeightedItem item) {
         JsonObject obj = new JsonObject();
-        
-        //should never be null for a real registered Item, but a config-driven registry lookup
-        //failing silently is worse than an obviously-wrong fallback value
         obj.addProperty("item", item.itemId);
         obj.addProperty("weight", item.weight);
-        
+        if (item.nbt != null) obj.addProperty("nbt", item.nbt);
         if (item.enchant != null) obj.add("enchant", toJson(item.enchant));
-        
         return obj;
     }
     
@@ -370,45 +397,69 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             for (JsonElement el : arr) {
                 JsonObject obj = el.getAsJsonObject();
                 int itemWeight = GsonHelper.getAsInt(obj, "weight", 1);
+                String itemNbt = obj.has("nbt") ? obj.get("nbt").getAsString() : null;
                 
                 EnchantData enchant = null;
                 
-                //optional enchants added per item, either randomly with specified enchanting power or predefined
                 if (obj.has("enchant")) {
                     JsonObject ench = obj.getAsJsonObject("enchant");
                     String type = GsonHelper.getAsString(ench, "type");
                     
                     if (type.equals("random")) {
-                        int power = GsonHelper.getAsInt(ench, "power", 30);
-                        enchant = new EnchantData.Random(power);
-                    }
-                    
-                    else if (type.equals("predefined")) {
+                        enchant = new EnchantData.Random(GsonHelper.getAsInt(ench, "power", 30));
+                    } else if (type.equals("predefined")) {
                         List<String> ids = new ArrayList<>();
                         List<Integer> levels = new ArrayList<>();
                         
-                        JsonArray list = ench.getAsJsonArray("list");
-                        for (JsonElement enchEl : list) {
+                        for (JsonElement enchEl : ench.getAsJsonArray("list")) {
                             JsonObject enchObj = enchEl.getAsJsonObject();
-                            String enchId = GsonHelper.getAsString(enchObj, "id");
-                            int level = GsonHelper.getAsInt(enchObj, "level");
-                            
-                            ids.add(enchId);
-                            levels.add(level);
+                            ids.add(GsonHelper.getAsString(enchObj, "id"));
+                            levels.add(GsonHelper.getAsInt(enchObj, "level"));
                         }
                         
                         enchant = new EnchantData.Predefined(ids, levels);
                     }
                 }
                 
-                String rawId = GsonHelper.getAsString(obj, "item");
-                items.add(new WeightedItem(rawId, itemWeight, enchant));
+                items.add(new WeightedItem(GsonHelper.getAsString(obj, "item"), itemWeight, enchant, itemNbt));
             }
             
             if (!items.isEmpty()) slots.put(slotKey.getValue(), items);
         }
         
-        return new EquipmentSet(name, weight, slots);
+        EquipmentSet set = new EquipmentSet(name, weight, slots);
+        
+        set.mobNbt = json.has("mob_nbt") ? json.get("mob_nbt").getAsString() : null;
+        
+        if (json.has("potion_effects")) {
+            for (JsonElement el : json.getAsJsonArray("potion_effects")) {
+                JsonObject o = el.getAsJsonObject();
+                set.potionEffects.add(new PotionEffectEntry(
+                        GsonHelper.getAsString(o, "effect"),
+                        GsonHelper.getAsInt(o, "duration", 600),
+                        GsonHelper.getAsInt(o, "amplifier", 0)
+                ));
+            }
+        }
+        
+        long timeMin = 0, timeMax = 24000;
+        if (json.has("time_of_day")) {
+            JsonObject t = json.getAsJsonObject("time_of_day");
+            timeMin = t.has("min") ? t.get("min").getAsLong() : 0;
+            timeMax = t.has("max") ? t.get("max").getAsLong() : 24000;
+        }
+        set.timeOfDay = new TimeRange(timeMin, timeMax);
+        
+        YComparator comparator = YComparator.LT;
+        int yValue = 350;
+        if (json.has("y_level")) {
+            JsonObject y = json.getAsJsonObject("y_level");
+            comparator = YComparator.fromSymbol(GsonHelper.getAsString(y, "comparator", "<"));
+            yValue = GsonHelper.getAsInt(y, "value", 350);
+        }
+        set.yLevel = new YLevelCondition(comparator, yValue);
+        
+        return set;
     }
     
     public static class MobEquipmentEntry {
@@ -499,11 +550,17 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         public Item item;
         public int weight;
         public EnchantData enchant;
+        public String nbt; // optional raw SNBT (braces optional), merged onto the ItemStack at spawn
         
         public WeightedItem(String itemId, int weight, EnchantData enchant) {
+            this(itemId, weight, enchant, null);
+        }
+        
+        public WeightedItem(String itemId, int weight, EnchantData enchant, String nbt) {
             this.itemId = itemId;
             this.weight = weight;
             this.enchant = enchant;
+            this.nbt = nbt;
             this.item = null;
         }
         
@@ -522,11 +579,130 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         public int weight;
         public Map<EquipmentSlot, List<WeightedItem>> slots;
         
+        public String mobNbt;
+        public List<PotionEffectEntry> potionEffects = new ArrayList<>();
+        
+        public TimeRange timeOfDay = new TimeRange(0, 24000);
+        public YLevelCondition yLevel = new YLevelCondition(YComparator.LT, 350);
+        
         public EquipmentSet(String name, int weight, Map<EquipmentSlot, List<WeightedItem>> slots) {
             this.name = name;
             this.weight = weight;
             this.slots = slots;
         }
+    }
+    
+    public static class PotionEffectEntry {
+        public String effectId;
+        public int durationTicks;
+        public int amplifier;
+        
+        public PotionEffectEntry(String effectId, int durationTicks, int amplifier) {
+            this.effectId = effectId;
+            this.durationTicks = durationTicks;
+            this.amplifier = amplifier;
+        }
+    }
+    
+    public static class TimeRange {
+        public long minTicks; // 0-24000
+        public long maxTicks;
+        
+        public TimeRange(long minTicks, long maxTicks) {
+            this.minTicks = minTicks;
+            this.maxTicks = maxTicks;
+        }
+        
+        //min > max means the range wraps past midnight (e.g. 22000 -> 2000 covers deep night into dawn)
+        public boolean matches(long currentTicks) {
+            long t = currentTicks % 24000;
+            if (minTicks <= maxTicks) return t >= minTicks && t <= maxTicks;
+            else return t >= minTicks || t <= maxTicks;
+        }
+    }
+    
+    public enum YComparator {
+        LT("<"), LTE("<="), EQ("="), GTE(">="), GT(">");
+        
+        public final String symbol;
+        YComparator(String symbol) { this.symbol = symbol; }
+        
+        public static YComparator fromSymbol(String raw) {
+            for (YComparator c : values()) if (c.symbol.equals(raw)) return c;
+            return EQ;
+        }
+    }
+    
+    public static class YLevelCondition {
+        public YComparator comparator;
+        public int value;
+        
+        public YLevelCondition(YComparator comparator, int value) {
+            this.comparator = comparator;
+            this.value = value;
+        }
+        
+        public boolean matches(int y) {
+            return switch (comparator) {
+                case LT -> y < value;
+                case LTE -> y <= value;
+                case EQ -> y == value;
+                case GTE -> y >= value;
+                case GT -> y > value;
+            };
+        }
+    }
+    
+    public static String ticksToTimeString(long ticks) {
+        long t = ((ticks % 24000) + 24000) % 24000;
+        int hour = (int) (((t / 1000) + 6) % 24);
+        int minute = (int) ((t % 1000) * 60 / 1000);
+        return String.format("%02d:%02d", hour, minute);
+    }
+    
+    public static long timeStringToTicks(String raw) {
+        String[] parts = raw.trim().split(":");
+        int hour = Integer.parseInt(parts[0].trim());
+        int minute = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) throw new IllegalArgumentException("Invalid time");
+        return ((hour - 6 + 24) % 24) * 1000L + Math.round(minute * 1000L / 60.0);
+    }
+    
+    public static YLevelCondition parseYLevel(String raw) {
+        String s = raw.trim();
+        YComparator comp;
+        String numPart;
+        
+        if (s.startsWith("<=")) { comp = YComparator.LTE; numPart = s.substring(2); }
+        else if (s.startsWith(">=")) { comp = YComparator.GTE; numPart = s.substring(2); }
+        else if (s.startsWith("<")) { comp = YComparator.LT; numPart = s.substring(1); }
+        else if (s.startsWith(">")) { comp = YComparator.GT; numPart = s.substring(1); }
+        else if (s.startsWith("=")) { comp = YComparator.EQ; numPart = s.substring(1); }
+        else { comp = YComparator.EQ; numPart = s; }
+        
+        return new YLevelCondition(comp, Integer.parseInt(numPart.trim()));
+    }
+    
+    public static String yLevelToString(YLevelCondition c) {
+        return c.comparator.symbol + c.value;
+    }
+    
+    public static boolean isYLevelUnrestricted(YLevelCondition y) {
+        return y.comparator == YComparator.LT && y.value == 350;
+    }
+    
+    public static TimeRange parseTimeRange(String raw) {
+        String[] parts = raw.split("-");
+        if (parts.length != 2) throw new IllegalArgumentException("Expected HH:MM-HH:MM");
+        return new TimeRange(timeStringToTicks(parts[0].trim()), timeStringToTicks(parts[1].trim()));
+    }
+    
+    public static String timeRangeToString(TimeRange t) {
+        return ticksToTimeString(t.minTicks) + "-" + ticksToTimeString(t.maxTicks);
+    }
+    
+    public static boolean isTimeUnrestricted(TimeRange t) {
+        return t.minTicks == 0 && t.maxTicks == 24000;
     }
     
     private record GroupBody(List<BiomeGroup> biomeGroups, List<EquipmentSet> globalSets) {}

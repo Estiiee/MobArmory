@@ -4,9 +4,13 @@ import com.livajq.mobarmory.Config;
 import com.livajq.mobarmory.MobArmory;
 import com.livajq.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.core.Holder;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -38,9 +42,6 @@ public class EquipmentHandler {
         MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.ENTRIES.get(mobId);
         if (entry == null) return;
         
-        //pick the difficulty group that applies right now.
-        //same order-dependent rule as biome matching below: first group that either
-        //specifically matches or is "global" wins, so put specific difficulties before a global fallback.
         MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(mob.level());
         MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = null;
         
@@ -67,7 +68,6 @@ public class EquipmentHandler {
         Holder<Biome> biomeHolder = mob.level().getBiome(mob.blockPosition());
         ResourceKey<Biome> biomeKey = biomeHolder.unwrapKey().orElse(null);
         
-        //biome groups within the chosen difficulty group, if present
         MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
         
         for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups) {
@@ -75,12 +75,8 @@ public class EquipmentHandler {
             boolean globalGroup = false;
             
             for (MobEquipmentReloadListener.BiomeMatch matcher : group.matchers) {
-                
-                //used either by the builder for unrestricted entries or as a fallback if the entity spawns outside any specific biome group
-                //manual JSONs with no biome restrictions can skip the biome groups altogether
                 if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Global) globalGroup = true;
                 
-                //biome id match
                 if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Id idMatch) {
                     if (biomeKey != null && biomeKey.location().equals(idMatch.id())) {
                         matches = true;
@@ -88,7 +84,6 @@ public class EquipmentHandler {
                     }
                 }
                 
-                //biome tag match
                 if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Tag tagMatch) {
                     if (biomeHolder.tags().anyMatch(t -> t.location().equals(tagMatch.tag()))) {
                         matches = true;
@@ -109,29 +104,35 @@ public class EquipmentHandler {
         if (chosenBiomeGroup != null) {
             candidateSets = chosenBiomeGroup.sets;
             biomeGroupChance = chosenBiomeGroup.chance;
-        }
-        //no biome restriction in this difficulty group: fall back to its own direct sets
-        else if (!chosenDifficultyGroup.globalSets.isEmpty()) {
+        } else if (!chosenDifficultyGroup.globalSets.isEmpty()) {
             candidateSets = chosenDifficultyGroup.globalSets;
             biomeGroupChance = null;
-        }
-        else {
+        } else {
             return;
         }
         
-        //most specific chance wins: biome group > difficulty group > mob-level default
         float effectiveChance = hasOverride(biomeGroupChance) ? biomeGroupChance :
-                        hasOverride(chosenDifficultyGroup.chance) ? chosenDifficultyGroup.chance : entry.chance;
+                hasOverride(chosenDifficultyGroup.chance) ? chosenDifficultyGroup.chance : entry.chance;
         
         if (mob.getRandom().nextFloat() > effectiveChance) return;
         
-        MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(candidateSets, mob.getRandom());
+        //time-of-day / Y-level eligibility - a set with either restriction that doesn't currently
+        //hold is excluded from the pool entirely, not just deprioritized
+        long currentTime = mob.level().getDayTime();
+        int mobY = mob.blockPosition().getY();
+        
+        List<MobEquipmentReloadListener.EquipmentSet> eligible = candidateSets.stream()
+                .filter(s -> s.timeOfDay.matches(currentTime))
+                .filter(s -> s.yLevel.matches(mobY))
+                .toList();
+        
+        if (eligible.isEmpty()) return;
+        
+        MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(eligible, mob.getRandom());
         if (chosenSet == null) return;
         
-        //apply items and their enchants
         for (var slotEntry : chosenSet.slots.entrySet()) {
-            MobEquipmentReloadListener.WeightedItem chosen =
-                    pickWeightedItem(slotEntry.getValue(), mob.getRandom());
+            MobEquipmentReloadListener.WeightedItem chosen = pickWeightedItem(slotEntry.getValue(), mob.getRandom());
             
             if (chosen != null) {
                 chosen.resolve();
@@ -139,12 +140,10 @@ public class EquipmentHandler {
                 Item actual = chosen.item != null ? chosen.item : Items.AIR;
                 ItemStack stack = new ItemStack(actual);
                 
-                //random enchants
                 if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
                     EnchantmentHelper.enchantItem(mob.getRandom(), stack, rnd.power(), false);
                 }
                 
-                //predefined enchants
                 if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
                     for (int i = 0; i < pre.ids().size(); i++) {
                         ResourceLocation id = new ResourceLocation(pre.ids().get(i));
@@ -153,8 +152,46 @@ public class EquipmentHandler {
                     }
                 }
                 
+                if (chosen.nbt != null) applyItemNbt(stack, chosen.nbt, chosen.itemId, mobId);
+                
                 mob.setItemSlot(slotEntry.getKey(), stack);
             }
+        }
+        
+        if (chosenSet.mobNbt != null) applyMobNbt(mob, chosenSet.mobNbt, mobId);
+        
+        for (MobEquipmentReloadListener.PotionEffectEntry pe : chosenSet.potionEffects) {
+            ResourceLocation rl = ResourceLocation.tryParse(pe.effectId);
+            MobEffect effect = rl != null ? ForgeRegistries.MOB_EFFECTS.getValue(rl) : null;
+            
+            if (effect != null) mob.addEffect(new MobEffectInstance(effect, pe.durationTicks, pe.amplifier));
+            else MobArmory.LOGGER.warn("Unknown potion effect {} while equipping {}", pe.effectId, mobId);
+        }
+    }
+    
+    //merges onto whatever the stack already has (e.g. enchants applied moments earlier) rather
+    //than replacing its NBT outright
+    private static void applyItemNbt(ItemStack stack, String rawNbt, String itemId, ResourceLocation mobId) {
+        try {
+            String wrapped = rawNbt.trim().startsWith("{") ? rawNbt.trim() : "{" + rawNbt.trim() + "}";
+            CompoundTag userTag = TagParser.parseTag(wrapped);
+            CompoundTag existing = stack.getTag();
+            stack.setTag(existing != null ? existing.merge(userTag) : userTag);
+        } catch (Exception e) {
+            MobArmory.LOGGER.warn("Failed to parse item NBT '{}' for {} on {}: {}", rawNbt, itemId, mobId, e.getMessage());
+        }
+    }
+    
+    //standard vanilla technique - the same save/merge/load /data merge entity itself uses
+    private static void applyMobNbt(Mob mob, String rawNbt, ResourceLocation mobId) {
+        try {
+            String wrapped = rawNbt.trim().startsWith("{") ? rawNbt.trim() : "{" + rawNbt.trim() + "}";
+            CompoundTag userTag = TagParser.parseTag(wrapped);
+            CompoundTag existing = mob.saveWithoutId(new CompoundTag());
+            existing.merge(userTag);
+            mob.load(existing);
+        } catch (Exception e) {
+            MobArmory.LOGGER.warn("Failed to parse mob NBT '{}' for {}: {}", rawNbt, mobId, e.getMessage());
         }
     }
     
@@ -162,9 +199,6 @@ public class EquipmentHandler {
         return value != null && value != 0.0F;
     }
     
-    //hardcore worlds are always forced to HARD difficulty, but "hardcore" as a matcher is treated
-    //as its own distinct level since that's the more useful thing to key equipment off of.
-    //peaceful is folded into easy for matching purposes - mobs generally don't spawn on peaceful anyway.
     private static MobEquipmentReloadListener.DifficultyLevel currentDifficulty(Level level) {
         if (level.getLevelData().isHardcore()) return MobEquipmentReloadListener.DifficultyLevel.HARDCORE;
         

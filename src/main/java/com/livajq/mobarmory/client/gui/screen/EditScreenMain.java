@@ -167,6 +167,7 @@ public class EditScreenMain extends Screen {
                     
                     if (set.name != null) sb.name(set.name);
                     sb.weight(set.weight);
+                    if (set.lootTable != null) sb.lootTable(set.lootTable);
                     
                     for (var slotEntry : set.slots.entrySet()) {
                         

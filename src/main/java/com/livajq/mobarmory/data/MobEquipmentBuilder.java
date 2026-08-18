@@ -243,6 +243,7 @@ public class MobEquipmentBuilder {
         private String name = null;
         private int weight = 1;
         private String mobNbt = null;
+        private String lootTable = null;
         private final List<PotionEffectBuilder> potionEffects = new ArrayList<>();
         private long timeOfDayMin = -1, timeOfDayMax = -1; // -1 = unset
         private String yComparator = null;
@@ -274,6 +275,11 @@ public class MobEquipmentBuilder {
         
         public EquipmentSetBuilder mobNbt(String nbt) {
             this.mobNbt = nbt;
+            return this;
+        }
+        
+        public EquipmentSetBuilder lootTable(String table) {
+            this.lootTable = table;
             return this;
         }
         
@@ -318,6 +324,7 @@ public class MobEquipmentBuilder {
             }
             
             if (mobNbt != null) obj.addProperty("mob_nbt", mobNbt);
+            if (lootTable != null) obj.addProperty("loot_table", lootTable);
             
             if (!potionEffects.isEmpty()) {
                 JsonArray arr = new JsonArray();

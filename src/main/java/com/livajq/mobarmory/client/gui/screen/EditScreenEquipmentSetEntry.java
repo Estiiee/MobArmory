@@ -9,6 +9,8 @@ import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public class EditScreenEquipmentSetEntry extends Screen {
     
@@ -32,9 +34,26 @@ public class EditScreenEquipmentSetEntry extends Screen {
     @Override
     protected void init() {
         int leftX = 20;
-        int y = 40;
+        int rightX = leftX + LEFT_PANEL_WIDTH + 10;
         
-        this.addRenderableWidget(Button.builder(
+        AtomicInteger leftCount = new AtomicInteger(0);
+        AtomicInteger rightCount = new AtomicInteger(0);
+        
+        Consumer<Button.Builder> addLeft = builder -> {
+            this.addRenderableWidget(builder
+                    .bounds(leftX, 40 + leftCount.getAndIncrement() * 24, LEFT_PANEL_WIDTH, 20)
+                    .build());
+        };
+        
+        Consumer<Button.Builder> addRight = builder -> {
+            this.addRenderableWidget(builder
+                    .bounds(rightX, 40 + rightCount.getAndIncrement() * 24, LEFT_PANEL_WIDTH, 20)
+                    .build());
+        };
+        
+        //LEFT COLUMN
+        
+        addLeft.accept(Button.builder(
                 Component.literal("Name"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
                         this,
@@ -45,10 +64,9 @@ public class EditScreenEquipmentSetEntry extends Screen {
                             this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
                         }
                 ))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addLeft.accept(Button.builder(
                 Component.literal("Weight"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
                         this,
@@ -60,39 +78,56 @@ public class EditScreenEquipmentSetEntry extends Screen {
                             } catch (Exception ignored) {}
                         }
                 ))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addLeft.accept(Button.builder(
                 Component.literal("Slots"),
                 btn -> this.minecraft.setScreen(new EditScreenSlots(main, difficultyGroup, biomeGroup, set))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        // NEW: Loot Table
+        addLeft.accept(Button.builder(
+                Component.literal("Loot Table"),
+                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        this,
+                        "Loot Table (e.g. mobarmory:blaze_inferno_loot)",
+                        set.lootTable != null ? set.lootTable : "",
+                        value -> {
+                            set.lootTable = value.isBlank() ? null : value;
+                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                        }
+                ))
+        ));
+        
+        addLeft.accept(Button.builder(
                 Component.literal("Mob NBT"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this, "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')", set.mobNbt != null ? set.mobNbt : "",
+                        this,
+                        "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')",
+                        set.mobNbt != null ? set.mobNbt : "",
                         value -> {
                             set.mobNbt = value.isBlank() ? null : value;
                             this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
                         },
                         EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true
                 ))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        //RIGHT COLUMN
+        
+        addRight.accept(Button.builder(
                 Component.literal("Potion Effects (" + set.potionEffects.size() + ")"),
                 btn -> this.minecraft.setScreen(new EditScreenPotionEffects(main, difficultyGroup, biomeGroup, set))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addRight.accept(Button.builder(
                 Component.literal("Time of Day"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this, "Time of Day (e.g. 18:00-6:00, blank = always)",
-                        MobEquipmentReloadListener.isTimeUnrestricted(set.timeOfDay) ? "" : MobEquipmentReloadListener.timeRangeToString(set.timeOfDay),
+                        this,
+                        "Time of Day (e.g. 18:00-6:00, blank = always)",
+                        MobEquipmentReloadListener.isTimeUnrestricted(set.timeOfDay)
+                                ? ""
+                                : MobEquipmentReloadListener.timeRangeToString(set.timeOfDay),
                         value -> {
                             try {
                                 set.timeOfDay = value.isBlank()
@@ -103,40 +138,41 @@ public class EditScreenEquipmentSetEntry extends Screen {
                         },
                         EditScreenShared::timeRangeValid, "Warning: invalid format (use HH:MM-HH:MM)", true
                 ))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addRight.accept(Button.builder(
                 Component.literal("Y Level"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this, "Y Level (e.g. <64, >=0, 40; blank = always)",
-                        MobEquipmentReloadListener.isYLevelUnrestricted(set.yLevel) ? "" : MobEquipmentReloadListener.yLevelToString(set.yLevel),
+                        this,
+                        "Y Level (e.g. <64, >=0, 40; blank = always)",
+                        MobEquipmentReloadListener.isYLevelUnrestricted(set.yLevel)
+                                ? ""
+                                : MobEquipmentReloadListener.yLevelToString(set.yLevel),
                         value -> {
                             try {
                                 set.yLevel = value.isBlank()
-                                        ? new MobEquipmentReloadListener.YLevelCondition(MobEquipmentReloadListener.YComparator.LT, 350)
+                                        ? new MobEquipmentReloadListener.YLevelCondition(
+                                        MobEquipmentReloadListener.YComparator.LT, 350)
                                         : MobEquipmentReloadListener.parseYLevel(value);
                             } catch (Exception ignored) {}
                             this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
                         },
                         EditScreenShared::yLevelValid, "Warning: invalid format (e.g. <64, >=0, 40)", true
                 ))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addRight.accept(Button.builder(
                 Component.literal("Delete Set"),
                 btn -> {
                     biomeGroup.sets.remove(set);
                     this.minecraft.setScreen(new EditScreenEquipmentSets(main, difficultyGroup, biomeGroup));
                 }
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-        y += 24;
+        ));
         
-        this.addRenderableWidget(Button.builder(
+        addRight.accept(Button.builder(
                 Component.literal("Back"),
                 btn -> this.minecraft.setScreen(new EditScreenEquipmentSets(main, difficultyGroup, biomeGroup))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        ));
     }
     
     @Override

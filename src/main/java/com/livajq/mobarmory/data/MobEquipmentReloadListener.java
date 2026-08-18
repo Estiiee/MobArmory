@@ -248,6 +248,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         }
         
         if (set.mobNbt != null) obj.addProperty("mob_nbt", set.mobNbt);
+        if (set.lootTable != null) obj.addProperty("loot_table", set.lootTable);
         
         if (!set.potionEffects.isEmpty()) {
             JsonArray arr = new JsonArray();
@@ -430,6 +431,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         EquipmentSet set = new EquipmentSet(name, weight, slots);
         
         set.mobNbt = json.has("mob_nbt") ? json.get("mob_nbt").getAsString() : null;
+        set.lootTable = json.has("loot_table") ? json.get("loot_table").getAsString() : null;
         
         if (json.has("potion_effects")) {
             for (JsonElement el : json.getAsJsonArray("potion_effects")) {
@@ -577,6 +579,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     public static class EquipmentSet {
         public String name;
         public int weight;
+        public String lootTable;
         public Map<EquipmentSlot, List<WeightedItem>> slots;
         
         public String mobNbt;

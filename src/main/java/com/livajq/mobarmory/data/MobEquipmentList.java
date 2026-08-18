@@ -7,190 +7,151 @@ public class MobEquipmentList {
     public static void init() {
         if (FMLLoader.isProduction()) return;
         
-        MobEquipmentBuilder.mob("minecraft:skeleton")
+        MobEquipmentBuilder.mob("minecraft:blaze")
+                .chance(0.9f)
+                
+                .difficultyGroup().match("hard")
+                .biomeGroup().match("minecraft:nether_wastes")
+                .set().name("inferno_priest").weight(3)
+                .mobNbt("CustomName:\"{\\\"text\\\":\\\"Inferno Priest\\\",\\\"color\\\":\\\"red\\\"}\",CustomNameVisible:1b")
+                .potionEffect("minecraft:fire_resistance", 999999, 1)
+                .potionEffect("minecraft:strength", 600, 1)
+                .timeOfDay(12000, 24000)
+                .yLevel(">=", 30)
+                .slot("mainhand")
+                .item("minecraft:fire_charge")
+                .nbt("CustomName:\"{\\\"text\\\":\\\"Holy Flame\\\"}\"")
+                .endItem()
+                .endSlot()
+                .endSet()
+                .endBiomeGroup()
+                .endDifficultyGroup()
+                
+                .createFile("blaze_inferno");
+        
+        
+        MobEquipmentBuilder.mob("minecraft:creeper")
                 .chance(1.0f)
                 
                 .difficultyGroup().global()
-                .biomeGroup()
-                .match("#forge:is_snowy")
-                .set()
-                .slot("head").item("minecraft:diamond_helmet").endItem().endSlot()
-                .slot("chest").item("minecraft:diamond_chestplate").endItem().endSlot()
-                .slot("legs").item("minecraft:diamond_leggings").endItem().endSlot()
-                .slot("feet").item("minecraft:diamond_boots").endItem().endSlot()
+                .biomeGroup().global()
+                .set().name("bomber")
+                .mobNbt("Fuse:5s,CustomName:\"{\\\"text\\\":\\\"Bomber\\\"}\",CustomNameVisible:1b")
+                .potionEffect("minecraft:speed", 200, 1)
+                .slot("head")
+                .item("minecraft:tnt")
+                .nbt("CustomName:\"{\\\"text\\\":\\\"Payload\\\"}\"")
+                .endItem()
+                .endSlot()
+                .slot("chest")
+                .item("minecraft:leather_chestplate")
+                .randomEnchant().power(10).endEnchant()
+                .endItem()
+                .endSlot()
+                .endSet()
+                .endBiomeGroup()
+                .endDifficultyGroup()
+                
+                .createFile("creeper_bomber");
+        
+        MobEquipmentBuilder.mob("minecraft:enderman")
+                .chance(0.5f)
+                
+                .difficultyGroup().global()
+                .biomeGroup().global()
+                .set().name("courier")
+                .mobNbt("CustomName:\"{\\\"text\\\":\\\"Courier\\\"}\",CustomNameVisible:1b,HandDropChances:[1.0f,1.0f]")
                 .slot("mainhand")
-                .item("minecraft:diamond_sword")
-                .randomEnchant().power(15)
+                .item("minecraft:grass_block").weight(1).endItem()
+                .item("minecraft:end_stone").weight(2).endItem()
+                .item("minecraft:obsidian").weight(1).endItem()
+                .endSlot()
+                .endSet()
+                .endBiomeGroup()
+                .endDifficultyGroup()
+                
+                .createFile("enderman_courier");
+        
+        MobEquipmentBuilder.mob("minecraft:pillager")
+                .chance(0.7f)
+                
+                .difficultyGroup().match("hard")
+                .biomeGroup().match("#forge:is_forest")
+                .set().name("elite_marksman").weight(5)
+                .timeOfDay(6000, 18000) // only daytime
+                .slot("mainhand")
+                .item("minecraft:crossbow")
+                .predefinedEnchant()
+                .addPredefined("minecraft:quick_charge", 3)
+                .addPredefined("minecraft:multishot", 1)
                 .endEnchant()
                 .endItem()
                 .endSlot()
                 .endSet()
                 .endBiomeGroup()
+                .endDifficultyGroup()
                 
-                .biomeGroup()
-                .match("#forge:is_desert")
-                .set()
-                .slot("head").item("minecraft:golden_helmet").endItem().endSlot()
-                .slot("chest").item("minecraft:golden_chestplate").endItem().endSlot()
-                .slot("legs").item("minecraft:golden_leggings").endItem().endSlot()
-                .slot("feet").item("minecraft:golden_boots").endItem().endSlot()
+                .createFile("pillager_marksman");
+        
+        
+        MobEquipmentBuilder.mob("minecraft:zombie")
+                .chance(0.3f)
+                
+                .difficultyGroup().match("hard")
+                .biomeGroup().match("#forge:is_snowy")
+                .set().name("royal_guard")
+                .mobNbt("CustomName:\"{\\\"text\\\":\\\"Royal Guard\\\",\\\"color\\\":\\\"gold\\\"}\",CustomNameVisible:1b")
+                .potionEffect("minecraft:strength", 400, 2)
+                .potionEffect("minecraft:resistance", 400, 1)
+                .slot("head").item("minecraft:diamond_helmet").randomEnchant().power(20).endEnchant().endItem().endSlot()
+                .slot("chest").item("minecraft:diamond_chestplate").randomEnchant().power(20).endEnchant().endItem().endSlot()
+                .slot("legs").item("minecraft:diamond_leggings").randomEnchant().power(20).endEnchant().endItem().endSlot()
+                .slot("feet").item("minecraft:diamond_boots").randomEnchant().power(20).endEnchant().endItem().endSlot()
+                .slot("mainhand").item("minecraft:diamond_sword").randomEnchant().power(25).endEnchant().endItem().endSlot()
+                .endSet()
+                .endBiomeGroup()
+                .endDifficultyGroup()
+                
+                .createFile("zombie_royal_guard");
+        
+        MobEquipmentBuilder.mob("minecraft:skeleton")
+                .chance(0.6f)
+                
+                .difficultyGroup().global()
+                .biomeGroup().global()
+                .set().name("night_stalker")
+                .timeOfDay(13000, 24000)
+                .potionEffect("minecraft:invisibility", 200, 0)
+                .slot("mainhand")
+                .item("minecraft:bow").weight(2).endItem()
+                .item("minecraft:crossbow").weight(1).endItem()
+                .endSlot()
+                .endSet()
+                .endBiomeGroup()
+                .endDifficultyGroup()
+                
+                .createFile("skeleton_night_stalker");
+        
+        MobEquipmentBuilder.mob("minecraft:piglin")
+                .chance(1.0f)
+                
+                .difficultyGroup().global()
+                .biomeGroup().match("minecraft:nether_wastes")
+                .set().name("hoarder")
+                .mobNbt("CustomName:\"{\\\"text\\\":\\\"Gold Hoarder\\\"}\",CustomNameVisible:1b,HandDropChances:[1.0f,1.0f]")
                 .slot("mainhand")
                 .item("minecraft:golden_sword")
                 .predefinedEnchant()
-                .addPredefined("minecraft:smite", 2)
+                .addPredefined("minecraft:sharpness", 3)
                 .endEnchant()
                 .endItem()
                 .endSlot()
+                .slot("chest").item("minecraft:golden_chestplate").endItem().endSlot()
                 .endSet()
                 .endBiomeGroup()
                 .endDifficultyGroup()
                 
-                .createFile("skeleton");
-        
-        MobEquipmentBuilder.mob("minecraft:wither_skeleton")
-                .chance(0.5f)
-                .difficultyGroup().global()
-                .biomeGroup().global()
-                .set()
-                .slot("head").item("minecraft:leather_helmet").endItem().endSlot()
-                .slot("chest").item("minecraft:leather_chestplate").endItem().endSlot()
-                .slot("legs").item("minecraft:leather_leggings").endItem().endSlot()
-                .slot("feet").item("minecraft:leather_boots").endItem().endSlot()
-                
-                .slot("mainhand")
-                .item("minecraft:iron_hoe")
-                .randomEnchant() //random enchant, default power = 30
-                .endEnchant()
-                .endItem()
-                .endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("wither_skeleton");
-        
-        MobEquipmentBuilder.mob("minecraft:wolf")
-                .chance(0.5f)
-                .difficultyGroup().global()
-                .biomeGroup().global()
-                .set()
-                .slot("head").item("minecraft:diamond_helmet").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                .createFile("wolf");
-        
-        MobEquipmentBuilder.mob("minecraft:skeleton")
-                .chance(0.8f)
-                
-                .difficultyGroup().match("easy")
-                .biomeGroup().match("#forge:is_snowy")
-                .chance(0.5f)
-                .set()
-                .slot("mainhand").item("minecraft:stone_sword").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-           
-                .difficultyGroup().match("hard")
-                .biomeGroup().match("minecraft:desert")
-                .set()
-                .slot("mainhand").item("minecraft:iron_sword")
-                .randomEnchant().power(10).endEnchant()
-                .endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-              
-                .difficultyGroup().global()
-                .biomeGroup().global()
-                .set()
-                .slot("mainhand").item("minecraft:bow").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("skeleton_test");
-        
-        MobEquipmentBuilder.mob("minecraft:zombie")
-                .chance(1.0f)
-                
-                .difficultyGroup().global()
-                .biomeGroup().global()
-                .set()
-                .slot("mainhand").item("minecraft:wooden_sword").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("zombie_test");
-        
-        MobEquipmentBuilder.mob("minecraft:stray")
-                .chance(1.0f)
-                
-                .difficultyGroup().global()
-                .biomeGroup().match("#forge:is_snowy")
-                .set().weight(1)
-                .slot("mainhand").item("minecraft:bow").endItem().endSlot()
-                .endSet()
-                
-                .set().weight(3)
-                .slot("mainhand").item("minecraft:crossbow").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("stray_test");
-        
-        MobEquipmentBuilder.mob("minecraft:piglin")
-                .chance(0.6f)
-                
-                .difficultyGroup().match("normal")
-                .biomeGroup().match("minecraft:nether_wastes")
-                .set()
-                .slot("mainhand").item("minecraft:golden_sword").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .difficultyGroup().match("hard")
-                .biomeGroup().global()
-                .set()
-                .slot("mainhand").item("minecraft:golden_axe")
-                .randomEnchant().power(20).endEnchant()
-                .endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("piglin_test");
-        
-        MobEquipmentBuilder.mob("minecraft:enderman")
-                .chance(0.2f)
-                
-                .difficultyGroup().match("easy")
-                .biomeGroup().global()
-                .set()
-                .name("random set whatever")
-                .slot("mainhand").item("minecraft:grass_block").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("enderman_loot");
-        
-        MobEquipmentBuilder.mob("minecraft:enderman")
-                .chance(0.2f)
-                
-                .difficultyGroup().match("hard")
-                .biomeGroup().global()
-                .set()
-                .slot("mainhand").item("minecraft:end_stone").endItem().endSlot()
-                .endSet()
-                .endBiomeGroup()
-                .endDifficultyGroup()
-                
-                .createFile("enderman_hard");
+                .createFile("piglin_hoarder");
         
     }
 }

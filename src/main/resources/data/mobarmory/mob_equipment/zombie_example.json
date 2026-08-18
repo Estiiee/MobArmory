@@ -1,0 +1,270 @@
+{
+  "mob": "minecraft:zombie",
+  "chance": 0.7,
+  "difficulties": [
+    {
+      "match": [
+        "global"
+      ],
+      "biomes": [
+        {
+          "match": [
+            "#forge:is_snowy"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "head": [
+                {
+                  "item": "minecraft:iron_helmet",
+                  "weight": 1
+                }
+              ],
+              "mainhand": [
+                {
+                  "item": "minecraft:iron_axe",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:sharpness",
+                        "level": 4
+                      }
+                    ]
+                  }
+                }
+              ],
+              "feet": [
+                {
+                  "item": "minecraft:iron_boots",
+                  "weight": 1
+                }
+              ],
+              "chest": [
+                {
+                  "item": "minecraft:iron_chestplate",
+                  "weight": 1
+                }
+              ],
+              "legs": [
+                {
+                  "item": "minecraft:iron_leggings",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "match": [
+            "#forge:is_cave"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "mainhand": [
+                {
+                  "item": "minecraft:iron_pickaxe",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:efficiency",
+                        "level": 4
+                      }
+                    ]
+                  }
+                }
+              ],
+              "chest": [
+                {
+                  "item": "minecraft:leather_chestplate",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "match": [
+            "#natures_spirit:is_tropical_woods"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "head": [
+                {
+                  "item": "minecraft:leather_helmet",
+                  "weight": 1
+                }
+              ],
+              "mainhand": [
+                {
+                  "item": "minecraft:golden_sword",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:unbreaking",
+                        "level": 3
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "match": [
+            "#forge:is_desert"
+          ],
+          "sets": [
+            {
+              "weight": 1,
+              "head": [
+                {
+                  "item": "minecraft:golden_helmet",
+                  "weight": 1
+                }
+              ],
+              "mainhand": [
+                {
+                  "item": "minecraft:iron_sword",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:sharpness",
+                        "level": 4
+                      }
+                    ]
+                  }
+                }
+              ],
+              "feet": [
+                {
+                  "item": "minecraft:golden_boots",
+                  "weight": 1
+                }
+              ],
+              "chest": [
+                {
+                  "item": "minecraft:golden_chestplate",
+                  "weight": 1
+                }
+              ],
+              "legs": [
+                {
+                  "item": "minecraft:golden_leggings",
+                  "weight": 1
+                }
+              ],
+              "loot_table": "mobarmory:zombie_desert_example"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "match": [
+        "hardcore"
+      ],
+      "chance": 0.1,
+      "biomes": [
+        {
+          "match": [
+            "global"
+          ],
+          "sets": [
+            {
+              "name": "Undersoldier",
+              "weight": 1,
+              "head": [
+                {
+                  "item": "minecraft:spawner",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:protection",
+                        "level": 4
+                      }
+                    ]
+                  }
+                }
+              ],
+              "mainhand": [
+                {
+                  "item": "minecraft:iron_sword",
+                  "weight": 1
+                },
+                {
+                  "item": "minecraft:iron_axe",
+                  "weight": 1
+                },
+                {
+                  "item": "minecraft:diamond_sword",
+                  "weight": 1
+                },
+                {
+                  "item": "minecraft:diamond_axe",
+                  "weight": 1
+                },
+                {
+                  "item": "minecraft:golden_sword",
+                  "weight": 1
+                },
+                {
+                  "item": "minecraft:netherite_sword",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:sharpness",
+                        "level": 4
+                      }
+                    ]
+                  }
+                }
+              ],
+              "feet": [
+                {
+                  "item": "minecraft:netherite_boots",
+                  "weight": 1,
+                  "enchant": {
+                    "type": "predefined",
+                    "list": [
+                      {
+                        "id": "minecraft:feather_falling",
+                        "level": 10
+                      }
+                    ]
+                  }
+                }
+              ],
+              "chest": [
+                {
+                  "item": "minecraft:netherite_chestplate",
+                  "weight": 1
+                }
+              ],
+              "legs": [
+                {
+                  "item": "minecraft:netherite_leggings",
+                  "weight": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -8,10 +8,12 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -19,7 +21,12 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -159,6 +166,8 @@ public class EquipmentHandler {
         }
         
         if (chosenSet.mobNbt != null) applyMobNbt(mob, chosenSet.mobNbt, mobId);
+        if (chosenSet.lootTable != null) mob.getPersistentData().putString("MobArmoryLootTable", chosenSet.lootTable);
+        if (chosenSet.lootTable != null) System.out.println("Added a loot table: " + chosenSet.lootTable);
         
         for (MobEquipmentReloadListener.PotionEffectEntry pe : chosenSet.potionEffects) {
             ResourceLocation rl = ResourceLocation.tryParse(pe.effectId);
@@ -166,6 +175,35 @@ public class EquipmentHandler {
             
             if (effect != null) mob.addEffect(new MobEffectInstance(effect, pe.durationTicks, pe.amplifier));
             else MobArmory.LOGGER.warn("Unknown potion effect {} while equipping {}", pe.effectId, mobId);
+        }
+    }
+    
+    @SubscribeEvent
+    public static void onLivingDrops(LivingDropsEvent event) {
+        if (!(event.getEntity() instanceof Mob mob)) return;
+        
+        CompoundTag tag = mob.getPersistentData();
+        if (!tag.contains("MobArmoryLootTable")) return;
+        
+        ResourceLocation table = new ResourceLocation(tag.getString("MobArmoryLootTable"));
+        LootTable loot = event.getEntity().level().getServer().getLootData().getLootTable(table);
+        
+        LootParams params = new LootParams.Builder((ServerLevel) event.getEntity().level())
+                .withParameter(LootContextParams.THIS_ENTITY, mob)
+                .withParameter(LootContextParams.ORIGIN, mob.position())
+                .withParameter(LootContextParams.DAMAGE_SOURCE, event.getSource())
+                .create(LootContextParamSets.ENTITY);
+        
+        for (ItemStack stack : loot.getRandomItems(params)) {
+            event.getDrops().add(
+                    new ItemEntity(
+                            mob.level(),
+                            mob.getX(),
+                            mob.getY(),
+                            mob.getZ(),
+                            stack
+                    )
+            );
         }
     }
     

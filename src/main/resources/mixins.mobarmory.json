@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "com.livajq.mobarmory.mixin",
+  "package": "com.estie.mobarmory.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "mobarmory.refmap.json",
   "mixins": [

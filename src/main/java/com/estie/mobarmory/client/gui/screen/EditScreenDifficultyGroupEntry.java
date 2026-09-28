@@ -1,18 +1,17 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import net.minecraft.util.math.MathHelper;
+import org.lwjgl.input.Keyboard;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
-public class EditScreenDifficultyGroupEntry extends Screen {
+public class EditScreenDifficultyGroupEntry extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
@@ -21,153 +20,117 @@ public class EditScreenDifficultyGroupEntry extends Screen {
     private static final int PREVIEW_SIZE = 100;
     
     public EditScreenDifficultyGroupEntry(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup) {
-        super(Component.literal("Edit Difficulty Group"));
         this.main = main;
         this.difficultyGroup = difficultyGroup;
     }
     
     @Override
-    protected void init() {
+    public void initGui() {
         int leftX = 20;
         int y = 40;
         
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Add Matcher"),
-                btn -> this.minecraft.setScreen(new EditScreenDifficultyMatcher(main, difficultyGroup))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(0, leftX, y, LEFT_PANEL_WIDTH, 20, "Add Matcher"));
         y += 24;
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Set Chance"),
-                btn -> {
-                    this.minecraft.setScreen(new TextInputScreen(
-                            this,
-                            "Set Chance (0.0 - 1.0)",
-                            "" + difficultyGroup.chance,
-                            value -> {
-                                try {
-                                    float f = Float.parseFloat(value);
-                                    difficultyGroup.chance = Mth.clamp(f, -1f, 1f);
-                                } catch (Exception ignored) {}
-                            }
-                    ));
-                }
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(1, leftX, y, LEFT_PANEL_WIDTH, 20, "Set Chance"));
         y += 24;
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Biome Groups"),
-                btn -> this.minecraft.setScreen(new EditScreenBiomeGroups(main, difficultyGroup))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(2, leftX, y, LEFT_PANEL_WIDTH, 20, "Biome Groups"));
         y += 24;
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Delete Group"),
-                btn -> {
-                    main.entry.difficultyGroups.remove(difficultyGroup);
-                    this.minecraft.setScreen(new EditScreenDifficultyGroups(main));
-                }
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(3, leftX, y, LEFT_PANEL_WIDTH, 20, "Delete Group"));
         y += 24;
-    
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenDifficultyGroups(main))
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(4, leftX, y, LEFT_PANEL_WIDTH, 20, "Back"));
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        super.render(gfx, mouseX, mouseY, partialTick);
+    protected void actionPerformed(GuiButton button) {
+        switch (button.id) {
+            case 0:
+                this.mc.displayGuiScreen(new EditScreenDifficultyMatcher(main, difficultyGroup));
+                break;
+            case 1:
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Set Chance (0.0 - 1.0)",
+                        "" + difficultyGroup.chance,
+                        value -> {
+                            try {
+                                float f = Float.parseFloat(value);
+                                difficultyGroup.chance = MathHelper.clamp(f, -1f, 1f);
+                            } catch (Exception ignored) {}
+                        }
+                ));
+                break;
+            case 2:
+                this.mc.displayGuiScreen(new EditScreenBiomeGroups(main, difficultyGroup));
+                break;
+            case 3:
+                main.entry.difficultyGroups.remove(difficultyGroup);
+                this.mc.displayGuiScreen(new EditScreenDifficultyGroups(main));
+                break;
+            case 4:
+                this.mc.displayGuiScreen(new EditScreenDifficultyGroups(main));
+                break;
+        }
+    }
+    
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        super.drawScreen(mouseX, mouseY, partialTicks);
         
-        EditScreenShared.renderHeader(gfx, font, main.entry, width, PREVIEW_SIZE, List.of(
+        EditScreenShared.renderHeader(this.mc, main.entry, width, PREVIEW_SIZE, Arrays.asList(
                 EditScreenShared.crumbMain(main.entry),
                 EditScreenShared.current("Difficulty Group")));
         
         int previewX = this.width - PREVIEW_SIZE - 20;
         int previewY = 60;
         int infoY = previewY + PREVIEW_SIZE + 12;
-
+        
         StringBuilder stringBuilder = new StringBuilder();
         for (MobEquipmentReloadListener.DifficultyLevel difficultyLevel : difficultyGroup.matchers) {
             stringBuilder.append(difficultyLevel.toString()).append(" ");
         }
         
         String raw = "Matchers: " + stringBuilder;
-
-        List<FormattedCharSequence> lines = this.font.split(Component.literal(raw), PREVIEW_SIZE);
+        
+        List<String> lines = this.fontRenderer.listFormattedStringToWidth(raw, PREVIEW_SIZE);
         
         int dy = 0;
-        for (FormattedCharSequence line : lines) {
-            gfx.drawCenteredString(this.font,
-                    line,
-                    previewX + PREVIEW_SIZE / 2,
-                    infoY + dy,
-                    0xFFFFFF);
-            dy += this.font.lineHeight;
+        for (String line : lines) {
+            this.drawCenteredString(this.fontRenderer, line, previewX + PREVIEW_SIZE / 2, infoY + dy, 0xFFFFFF);
+            dy += this.fontRenderer.FONT_HEIGHT;
         }
         
         int usedHeight = dy;
         
-        gfx.drawCenteredString(this.font,
-                "Chance: " + (int)((EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance) * 100) + "%",
-                previewX + PREVIEW_SIZE / 2,
-                infoY + usedHeight + 4,
-                0xAAAAAA);
+        this.drawCenteredString(this.fontRenderer,
+                "Chance: " + (int) ((EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance) * 100) + "%",
+                previewX + PREVIEW_SIZE / 2, infoY + usedHeight + 4, 0xAAAAAA);
         
-        gfx.drawCenteredString(this.font,
+        this.drawCenteredString(this.fontRenderer,
                 "Biome Groups: " + difficultyGroup.biomeGroups.size(),
-                previewX + PREVIEW_SIZE / 2,
-                infoY + usedHeight + 18,
-                0xAAAAAA);
-        
+                previewX + PREVIEW_SIZE / 2, infoY + usedHeight + 18, 0xAAAAAA);
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
-                    },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
-            ));
-            return true;
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo((result, id) -> {
+                if (result) mc.displayGuiScreen(null);
+                else mc.displayGuiScreen(EditScreenDifficultyGroupEntry.this);
+            }, "Exit Editor", "Are you sure you want to exit? Unsaved changes will be lost.", 0));
+            return;
         }
-        
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
     }
     
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return true;
-        if (EditScreenShared.mouseClicked(mouseX, mouseY, button)) return true;
-        return super.mouseClicked(mouseX, mouseY, button);
-    }
-    
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (EditScreenShared.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-    
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (EditScreenShared.mouseReleased(mouseX, mouseY, button)) return true;
-        return super.mouseReleased(mouseX, mouseY, button);
-    }
-    
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (EditScreenShared.mouseScrolled(mouseX, mouseY, delta)) return true;
-        return super.mouseScrolled(mouseX, mouseY, delta);
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return;
+        super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 }

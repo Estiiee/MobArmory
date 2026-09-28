@@ -1,53 +1,64 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.LookupListWidget;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.GuiScreen;
+import org.lwjgl.input.Mouse;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public class LookupScreen extends Screen {
-    
+public class LookupScreen extends GuiScreen {
     private final List<String> fileNames;
     private LookupListWidget list;
     
     public LookupScreen(List<String> fileNames) {
-        super(Component.literal("MobArmory Lookup"));
         this.fileNames = fileNames;
     }
     
     @Override
-    protected void init() {
-        list = new LookupListWidget(
-                this.minecraft,
-                this.width,
-                this.height,
+    public void initGui() {
+        this.list = new LookupListWidget(
+                this.mc,
+                20,
                 32,
-                this.height - 32,
+                this.width - 40,
+                this.height - 64,
                 20
         );
         
-        this.addWidget(list);
+        List<String> sorted = new ArrayList<>(this.fileNames);
+        Collections.sort(sorted);
+        this.list.entries.addAll(sorted);
+    }
+    
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
         
-        List<String> sorted = new ArrayList<>(fileNames);
-        sorted.sort(String::compareTo);
-        
-        for (String fileName : sorted) {
-            list.children().add(new LookupListWidget.Entry(fileName));
+        if (this.list != null) {
+            this.list.render(mouseX, mouseY);
         }
+        
+        super.drawScreen(mouseX, mouseY, partialTicks);
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        list.render(gfx, mouseX, mouseY, partialTick);
-        super.render(gfx, mouseX, mouseY, partialTick);
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (this.list != null && this.list.mouseClicked(mouseX, mouseY, mouseButton)) {
+            return;
+        }
+        
+        super.mouseClicked(mouseX, mouseY, mouseButton);
     }
     
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        return list.mouseClicked(x, y, button) || super.mouseClicked(x, y, button);
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        
+        if (this.list != null) {
+            this.list.mouseScrolled(Mouse.getEventDWheel());
+        }
     }
 }

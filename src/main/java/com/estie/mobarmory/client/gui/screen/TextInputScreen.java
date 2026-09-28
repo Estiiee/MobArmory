@@ -1,20 +1,19 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.MultilineTextBox;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiTextField;
+import net.minecraft.client.gui.GuiYesNo;
+import org.lwjgl.input.Keyboard;
 
+import java.io.IOException;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-public class TextInputScreen extends Screen {
+public class TextInputScreen extends GuiScreen {
     
-    private final Screen parent;
+    private final GuiScreen parent;
     private final String title;
     private final Consumer<String> onConfirm;
     private final String initialText;
@@ -23,18 +22,42 @@ public class TextInputScreen extends Screen {
     private final boolean allowEmpty;
     private final boolean multiline;
     
-    public TextInputScreen(Screen parent, String title, String initialText, Consumer<String> onConfirm) {
+    private GuiTextField box;
+    private MultilineTextBox multilineBox;
+    private String errorMessage = null;
+    
+    public TextInputScreen(
+            GuiScreen parent,
+            String title,
+            String initialText,
+            Consumer<String> onConfirm) {
+        
         this(parent, title, initialText, onConfirm, null, null, false, false);
     }
     
-    public TextInputScreen(Screen parent, String title, String initialText, Consumer<String> onConfirm,
-                           Predicate<String> validator, String invalidMessage, boolean allowEmpty) {
-        this(parent, title, initialText, onConfirm, validator, invalidMessage, allowEmpty, false);
+    public TextInputScreen(
+            GuiScreen parent,
+            String title,
+            String initialText,
+            Consumer<String> onConfirm,
+            Predicate<String> validator,
+            String invalidMessage,
+            boolean allowEmpty) {
+        
+        this(parent, title, initialText, onConfirm,
+                validator, invalidMessage, allowEmpty, false);
     }
     
-    public TextInputScreen(Screen parent, String title, String initialText, Consumer<String> onConfirm,
-                           Predicate<String> validator, String invalidMessage, boolean allowEmpty, boolean multiline) {
-        super(Component.literal(title));
+    public TextInputScreen(
+            GuiScreen parent,
+            String title,
+            String initialText,
+            Consumer<String> onConfirm,
+            Predicate<String> validator,
+            String invalidMessage,
+            boolean allowEmpty,
+            boolean multiline) {
+        
         this.parent = parent;
         this.title = title;
         this.initialText = initialText;
@@ -45,69 +68,193 @@ public class TextInputScreen extends Screen {
         this.multiline = multiline;
     }
     
-    private EditBox box;
-    private MultilineTextBox multilineBox;
-    private String errorMessage = null;
-    
     @Override
-    protected void init() {
+    public void initGui() {
         if (multiline) {
-            int w = this.width * 3 / 4, h = this.height - 100;
-            multilineBox = new MultilineTextBox(this.font, this.width / 2 - w / 2, 50, w, h, initialText);
-            this.addRenderableWidget(multilineBox);
-            this.setInitialFocus(multilineBox);
+            int w = this.width * 3 / 4;
+            int h = this.height - 100;
+            
+            multilineBox = new MultilineTextBox(
+                    this.fontRenderer,
+                    this.width / 2 - w / 2,
+                    50,
+                    w,
+                    h,
+                    initialText == null ? "" : initialText
+            );
+            
+            multilineBox.setFocused(true);
         } else {
-            int w = 200, h = 20;
-            box = new EditBox(this.font, this.width / 2 - w / 2, this.height / 2 - 10, w, h, Component.literal(""));
-            box.setMaxLength(4096);
-            box.setValue(initialText == null ? "" : initialText);
-            this.addRenderableWidget(box);
+            int w = 200;
+            int h = 20;
+            
+            box = new GuiTextField(
+                    0,
+                    this.fontRenderer,
+                    this.width / 2 - w / 2,
+                    this.height / 2 - 10,
+                    w,
+                    h
+            );
+            
+            box.setMaxStringLength(4096);
+            box.setText(initialText == null ? "" : initialText);
+            box.setFocused(true);
         }
         
         int buttonY = this.height - 40;
-        this.addRenderableWidget(Button.builder(Component.literal("OK"), btn -> {
-            String value = currentValue().trim();
-            if (value.isEmpty() && !allowEmpty) { errorMessage = "Cannot be empty"; return; }
-            onConfirm.accept(value);
-            this.minecraft.setScreen(parent);
-        }).bounds(this.width / 2 - 50, buttonY, 40, 20).build());
         
-        this.addRenderableWidget(Button.builder(Component.literal("Cancel"), btn -> {
-            this.minecraft.setScreen(parent);
-        }).bounds(this.width / 2 + 10, buttonY, 60, 20).build());
+        this.buttonList.add(new GuiButton(
+                0,
+                this.width / 2 - 50,
+                buttonY,
+                40,
+                20,
+                "OK"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                1,
+                this.width / 2 + 10,
+                buttonY,
+                60,
+                20,
+                "Cancel"
+        ));
     }
     
     private String currentValue() {
-        return multiline ? multilineBox.getValue() : box.getValue();
+        return multiline
+                ? multilineBox.getValue()
+                : box.getText();
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        gfx.drawCenteredString(this.font, title, this.width / 2, 15, 0xFFFFFF);
+    protected void actionPerformed(GuiButton button) throws IOException {
+        if (button.id == 0) {
+            String value = currentValue().trim();
+            
+            if (value.isEmpty() && !allowEmpty) {
+                errorMessage = "Cannot be empty";
+                return;
+            }
+            
+            if (validator != null
+                    && !value.isEmpty()
+                    && !validator.test(value)) {
+                return;
+            }
+            
+            onConfirm.accept(value);
+            this.mc.displayGuiScreen(parent);
+            return;
+        }
+        
+        if (button.id == 1) {
+            this.mc.displayGuiScreen(parent);
+        }
+    }
+    
+    @Override
+    public void updateScreen() {
+        super.updateScreen();
+        
+        if (box != null) {
+            box.updateCursorCounter();
+        }
+    }
+    
+    @Override
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo(
+                    (result, id) -> {
+                        if (result) mc.displayGuiScreen(null);
+                        else mc.displayGuiScreen(TextInputScreen.this);
+                    },
+                    "Exit Editor",
+                    "Are you sure you want to exit? Unsaved changes will be lost.",
+                    0
+            ));
+            return;
+        }
+        
+        if (multiline) {
+            if (multilineBox != null) {
+                multilineBox.keyTyped(typedChar, keyCode);
+            }
+        } else {
+            if (box != null) {
+                box.textboxKeyTyped(typedChar, keyCode);
+            }
+        }
+        
+        super.keyTyped(typedChar, keyCode);
+    }
+    
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (!multiline && box != null) {
+            box.mouseClicked(mouseX, mouseY, mouseButton);
+        }
+        
+        if (multiline && multilineBox != null) {
+            multilineBox.mouseClicked(mouseX, mouseY, mouseButton);
+        }
+        
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+    
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        
+        this.drawCenteredString(
+                this.fontRenderer,
+                title,
+                this.width / 2,
+                15,
+                0xFFFFFF
+        );
         
         String value = currentValue();
-        if (validator != null && !value.isBlank() && !validator.test(value.trim())) {
-            gfx.drawCenteredString(this.font, invalidMessage, this.width / 2, 30, 0xFF5555);
+        
+        if (validator != null
+                && !value.trim().isEmpty()
+                && !validator.test(value.trim())) {
+            
+            this.drawCenteredString(
+                    this.fontRenderer,
+                    invalidMessage,
+                    this.width / 2,
+                    30,
+                    0xFF5555
+            );
+            
         } else if (errorMessage != null) {
-            gfx.drawCenteredString(this.font, errorMessage, this.width / 2, 30, 0xFF4444);
+            
+            this.drawCenteredString(
+                    this.fontRenderer,
+                    errorMessage,
+                    this.width / 2,
+                    30,
+                    0xFF4444
+            );
         }
-        super.render(gfx, mouseX, mouseY, partialTick);
+        
+        if (box != null) {
+            box.drawTextBox();
+        }
+        
+        if (multilineBox != null) {
+            multilineBox.draw();
+        }
+        
+        super.drawScreen(mouseX, mouseY, partialTicks);
     }
     
     @Override
-    public boolean shouldCloseOnEsc() { return false; }
-    
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> this.minecraft.setScreen(confirmed ? null : this),
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
-            ));
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+    public boolean doesGuiPauseGame() {
+        return false;
     }
 }

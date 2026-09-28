@@ -1,18 +1,17 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
-public class EditScreenEquipmentSetEntry extends Screen {
+public class EditScreenEquipmentSetEntry extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
@@ -22,9 +21,10 @@ public class EditScreenEquipmentSetEntry extends Screen {
     private static final int LEFT_PANEL_WIDTH = 120;
     private static final int PREVIEW_SIZE = 100;
     
-    public EditScreenEquipmentSetEntry(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup,
-                                       MobEquipmentReloadListener.BiomeGroup biomeGroup, MobEquipmentReloadListener.EquipmentSet set) {
-        super(Component.literal("Edit Equipment Set"));
+    public EditScreenEquipmentSetEntry(EditScreenMain main,
+                                       MobEquipmentReloadListener.DifficultyGroup difficultyGroup,
+                                       MobEquipmentReloadListener.BiomeGroup biomeGroup,
+                                       MobEquipmentReloadListener.EquipmentSet set) {
         this.main = main;
         this.difficultyGroup = difficultyGroup;
         this.biomeGroup = biomeGroup;
@@ -32,97 +32,136 @@ public class EditScreenEquipmentSetEntry extends Screen {
     }
     
     @Override
-    protected void init() {
+    public void initGui() {
         int leftX = 20;
         int rightX = leftX + LEFT_PANEL_WIDTH + 10;
         
-        AtomicInteger leftCount = new AtomicInteger(0);
-        AtomicInteger rightCount = new AtomicInteger(0);
+        int leftCount = 0;
+        int rightCount = 0;
         
-        Consumer<Button.Builder> addLeft = builder -> {
-            this.addRenderableWidget(builder
-                    .bounds(leftX, 40 + leftCount.getAndIncrement() * 24, LEFT_PANEL_WIDTH, 20)
-                    .build());
-        };
+        // LEFT COLUMN
         
-        Consumer<Button.Builder> addRight = builder -> {
-            this.addRenderableWidget(builder
-                    .bounds(rightX, 40 + rightCount.getAndIncrement() * 24, LEFT_PANEL_WIDTH, 20)
-                    .build());
-        };
+        this.buttonList.add(new GuiButton(
+                0, leftX, 40 + leftCount++ * 24, LEFT_PANEL_WIDTH, 20, "Name"
+        ));
         
-        //LEFT COLUMN
+        this.buttonList.add(new GuiButton(
+                1, leftX, 40 + leftCount++ * 24, LEFT_PANEL_WIDTH, 20, "Weight"
+        ));
         
-        addLeft.accept(Button.builder(
-                Component.literal("Name"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
+        this.buttonList.add(new GuiButton(
+                2, leftX, 40 + leftCount++ * 24, LEFT_PANEL_WIDTH, 20, "Slots"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                3, leftX, 40 + leftCount++ * 24, LEFT_PANEL_WIDTH, 20, "Loot Table"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                4, leftX, 40 + leftCount++ * 24, LEFT_PANEL_WIDTH, 20, "Mob NBT"
+        ));
+        
+        // RIGHT COLUMN
+        
+        this.buttonList.add(new GuiButton(
+                5, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20,
+                "Potion Effects (" + set.potionEffects.size() + ")"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                6, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20, "Time of Day"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                7, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20, "Y Level"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                8, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20, "Delete Set"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                9, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20, "Back"
+        ));
+    }
+    
+    @Override
+    protected void actionPerformed(GuiButton button) throws IOException {
+        switch (button.id) {
+            case 0:
+                this.mc.displayGuiScreen(new TextInputScreen(
                         this,
                         "Set Name (identifier only, optional)",
                         set.name != null ? set.name : "",
                         value -> {
-                            set.name = value.isBlank() ? null : value;
-                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                            set.name = value.trim().isEmpty() ? null : value;
+                            this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                                    main, difficultyGroup, biomeGroup, set
+                            ));
                         }
-                ))
-        ));
-        
-        addLeft.accept(Button.builder(
-                Component.literal("Weight"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
+                ));
+                break;
+            
+            case 1:
+                this.mc.displayGuiScreen(new TextInputScreen(
                         this,
                         "Set Weight (relative pick chance)",
                         "" + set.weight,
                         value -> {
                             try {
                                 set.weight = Math.max(1, Integer.parseInt(value));
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
-                ))
-        ));
-        
-        addLeft.accept(Button.builder(
-                Component.literal("Slots"),
-                btn -> this.minecraft.setScreen(new EditScreenSlots(main, difficultyGroup, biomeGroup, set))
-        ));
-        
-        // NEW: Loot Table
-        addLeft.accept(Button.builder(
-                Component.literal("Loot Table"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
+                ));
+                break;
+            
+            case 2:
+                this.mc.displayGuiScreen(new EditScreenSlots(
+                        main, difficultyGroup, biomeGroup, set
+                ));
+                break;
+            
+            case 3:
+                this.mc.displayGuiScreen(new TextInputScreen(
                         this,
                         "Loot Table (e.g. mobarmory:blaze_inferno_loot)",
                         set.lootTable != null ? set.lootTable : "",
                         value -> {
-                            set.lootTable = value.isBlank() ? null : value;
-                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                            set.lootTable = value.trim().isEmpty() ? null : value;
+                            this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                                    main, difficultyGroup, biomeGroup, set
+                            ));
                         }
-                ))
-        ));
-        
-        addLeft.accept(Button.builder(
-                Component.literal("Mob NBT"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this, "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')",
+                ));
+                break;
+            
+            case 4:
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Mob NBT (e.g. CustomName: \"Boss\")",
                         set.mobNbt != null ? set.mobNbt : "",
                         value -> {
-                            set.mobNbt = value.isBlank() ? null : value;
-                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                            set.mobNbt = value.trim().isEmpty() ? null : value;
+                            this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                                    main, difficultyGroup, biomeGroup, set
+                            ));
                         },
-                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true,
+                        EditScreenShared::nbtValid,
+                        "Warning: invalid NBT syntax",
+                        true,
                         true
-                ))
-        ));
-        
-        //RIGHT COLUMN
-        
-        addRight.accept(Button.builder(
-                Component.literal("Potion Effects (" + set.potionEffects.size() + ")"),
-                btn -> this.minecraft.setScreen(new EditScreenPotionEffects(main, difficultyGroup, biomeGroup, set))
-        ));
-        
-        addRight.accept(Button.builder(
-                Component.literal("Time of Day"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
+                ));
+                break;
+            
+            case 5:
+                this.mc.displayGuiScreen(new EditScreenPotionEffects(
+                        main, difficultyGroup, biomeGroup, set
+                ));
+                break;
+            
+            case 6:
+                this.mc.displayGuiScreen(new TextInputScreen(
                         this,
                         "Time of Day (e.g. 18:00-6:00, blank = always)",
                         MobEquipmentReloadListener.isTimeUnrestricted(set.timeOfDay)
@@ -130,19 +169,24 @@ public class EditScreenEquipmentSetEntry extends Screen {
                                 : MobEquipmentReloadListener.timeRangeToString(set.timeOfDay),
                         value -> {
                             try {
-                                set.timeOfDay = value.isBlank()
+                                set.timeOfDay = value.trim().isEmpty()
                                         ? new MobEquipmentReloadListener.TimeRange(0, 24000)
                                         : MobEquipmentReloadListener.parseTimeRange(value);
-                            } catch (Exception ignored) {}
-                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                            } catch (Exception ignored) {
+                            }
+                            
+                            this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                                    main, difficultyGroup, biomeGroup, set
+                            ));
                         },
-                        EditScreenShared::timeRangeValid, "Warning: invalid format (use HH:MM-HH:MM)", true
-                ))
-        ));
-        
-        addRight.accept(Button.builder(
-                Component.literal("Y Level"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
+                        EditScreenShared::timeRangeValid,
+                        "Warning: invalid format (use HH:MM-HH:MM)",
+                        true
+                ));
+                break;
+            
+            case 7:
+                this.mc.displayGuiScreen(new TextInputScreen(
                         this,
                         "Y Level (e.g. <64, >=0, 40; blank = always)",
                         MobEquipmentReloadListener.isYLevelUnrestricted(set.yLevel)
@@ -150,100 +194,142 @@ public class EditScreenEquipmentSetEntry extends Screen {
                                 : MobEquipmentReloadListener.yLevelToString(set.yLevel),
                         value -> {
                             try {
-                                set.yLevel = value.isBlank()
+                                set.yLevel = value.trim().isEmpty()
                                         ? new MobEquipmentReloadListener.YLevelCondition(
                                         MobEquipmentReloadListener.YComparator.LT, 350)
                                         : MobEquipmentReloadListener.parseYLevel(value);
-                            } catch (Exception ignored) {}
-                            this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
+                            } catch (Exception ignored) {
+                            }
+                            
+                            this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                                    main, difficultyGroup, biomeGroup, set
+                            ));
                         },
-                        EditScreenShared::yLevelValid, "Warning: invalid format (e.g. <64, >=0, 40)", true
-                ))
-        ));
-        
-        addRight.accept(Button.builder(
-                Component.literal("Delete Set"),
-                btn -> {
-                    biomeGroup.sets.remove(set);
-                    this.minecraft.setScreen(new EditScreenEquipmentSets(main, difficultyGroup, biomeGroup));
-                }
-        ));
-        
-        addRight.accept(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenEquipmentSets(main, difficultyGroup, biomeGroup))
-        ));
+                        EditScreenShared::yLevelValid,
+                        "Warning: invalid format (e.g. <64, >=0, 40)",
+                        true
+                ));
+                break;
+            
+            case 8:
+                biomeGroup.sets.remove(set);
+                this.mc.displayGuiScreen(new EditScreenEquipmentSets(
+                        main, difficultyGroup, biomeGroup
+                ));
+                break;
+            
+            case 9:
+                this.mc.displayGuiScreen(new EditScreenEquipmentSets(
+                        main, difficultyGroup, biomeGroup
+                ));
+                break;
+        }
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        super.render(gfx, mouseX, mouseY, partialTick);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        super.drawScreen(mouseX, mouseY, partialTicks);
         
-        EditScreenShared.renderHeader(gfx, font, main.entry, width, PREVIEW_SIZE, List.of(
-                EditScreenShared.crumbMain(main.entry),
-                EditScreenShared.crumbDifficultyGroup(main, difficultyGroup),
-                EditScreenShared.crumbBiomeGroup(main, difficultyGroup, biomeGroup),
-                EditScreenShared.current(set.name != null ? set.name : "Equipment Set")));
+        EditScreenShared.renderHeader(
+                this.mc,
+                main.entry,
+                this.width,
+                PREVIEW_SIZE,
+                Arrays.asList(
+                        EditScreenShared.crumbMain(main.entry),
+                        EditScreenShared.crumbDifficultyGroup(main, difficultyGroup),
+                        EditScreenShared.crumbBiomeGroup(main, difficultyGroup, biomeGroup),
+                        EditScreenShared.current(set.name != null ? set.name : "Equipment Set")
+                )
+        );
         
         int previewX = this.width - PREVIEW_SIZE - 20;
         int infoY = 60 + PREVIEW_SIZE + 12;
         
-        gfx.drawCenteredString(this.font, "Name: " + (set.name != null ? set.name : "(unnamed)"),
-                previewX + PREVIEW_SIZE / 2, infoY, 0xFFFFFF);
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Name: " + (set.name != null ? set.name : "(unnamed)"),
+                previewX + PREVIEW_SIZE / 2,
+                infoY,
+                0xFFFFFF
+        );
         
-        gfx.drawCenteredString(this.font, "Weight: " + set.weight,
-                previewX + PREVIEW_SIZE / 2, infoY + 14, 0xAAAAAA);
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Weight: " + set.weight,
+                previewX + PREVIEW_SIZE / 2,
+                infoY + 14,
+                0xAAAAAA
+        );
         
-        int itemCount = set.slots.values().stream().mapToInt(List::size).sum();
-        gfx.drawCenteredString(this.font, "Items: " + itemCount + " across " + set.slots.size() + " slot(s)",
-                previewX + PREVIEW_SIZE / 2, infoY + 28, 0xAAAAAA);
+        int itemCount = 0;
+        for (List<MobEquipmentReloadListener.WeightedItem> items : set.slots.values()) {
+            itemCount += items.size();
+        }
+        
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Items: " + itemCount + " across " + set.slots.size() + " slot(s)",
+                previewX + PREVIEW_SIZE / 2,
+                infoY + 28,
+                0xAAAAAA
+        );
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo(
+                    (result, id) -> {
+                        if (result) mc.displayGuiScreen(null);
+                        else mc.displayGuiScreen(EditScreenEquipmentSetEntry.this);
                     },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+                    "Exit Editor",
+                    "Are you sure you want to exit? Unsaved changes will be lost.",
+                    0
             ));
-            return true;
+            return;
         }
         
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
     }
     
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return true;
-        if (EditScreenShared.mouseClicked(mouseX, mouseY, button)) return true;
-        return super.mouseClicked(mouseX, mouseY, button);
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return;
+        if (EditScreenShared.mouseClicked(mouseX, mouseY, mouseButton)) return;
+        super.mouseClicked(mouseX, mouseY, mouseButton);
     }
     
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (EditScreenShared.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (EditScreenShared.mouseDragged(mouseX, mouseY)) {
+            return;
+        }
+        
+        super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
     }
     
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (EditScreenShared.mouseReleased(mouseX, mouseY, button)) return true;
-        return super.mouseReleased(mouseX, mouseY, button);
+    protected void mouseReleased(int mouseX, int mouseY, int state) {
+        if (EditScreenShared.mouseReleased()) return;
+        super.mouseReleased(mouseX, mouseY, state);
     }
     
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (EditScreenShared.mouseScrolled(mouseX, mouseY, delta)) return true;
-        return super.mouseScrolled(mouseX, mouseY, delta);
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        
+        EditScreenShared.mouseScrolled(
+                Mouse.getEventX(),
+                Mouse.getEventY(),
+                Mouse.getEventDWheel()
+        );
     }
 }

@@ -4,50 +4,30 @@ import com.estie.mobarmory.client.gui.screen.EditScreenBiomeGroupEntry;
 import com.estie.mobarmory.client.gui.screen.EditScreenMain;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.ObjectSelectionList;
-import net.minecraft.network.chat.Component;
 
-public class BiomeGroupList extends ObjectSelectionList<BiomeGroupList.Entry> {
+public class BiomeGroupList extends SimpleEntryList<MobEquipmentReloadListener.BiomeGroup> {
     
-    public BiomeGroupList(Minecraft mc, int width, int height, int top, int bottom, int itemHeight) {
-        super(mc, width, height, top, bottom, itemHeight);
+    private final EditScreenMain main;
+    private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
+    
+    public BiomeGroupList(Minecraft mc, int left, int top, int width, int height, int itemHeight,
+                          EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup) {
+        super(mc, left, top, width, height, itemHeight);
+        this.main = main;
+        this.difficultyGroup = difficultyGroup;
     }
     
-    public static class Entry extends ObjectSelectionList.Entry<Entry> {
-        
-        private final MobEquipmentReloadListener.BiomeGroup group;
-        private final EditScreenMain main;
-        private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
-        private final String raw;
-        
-        public Entry(MobEquipmentReloadListener.BiomeGroup group, EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup) {
-            this.group = group;
-            this.main = main;
-            this.difficultyGroup = difficultyGroup;
-            
-            StringBuilder builder = new StringBuilder();
-            for (MobEquipmentReloadListener.BiomeMatch match : group.matchers) {
-                builder.append(MobEquipmentReloadListener.biomeMatchToString(match));
-                builder.append(" ");
-            }
-            this.raw = builder.toString();
+    @Override
+    protected void renderEntry(MobEquipmentReloadListener.BiomeGroup group, int index, int x, int y, int rowWidth, boolean hovered) {
+        StringBuilder builder = new StringBuilder();
+        for (MobEquipmentReloadListener.BiomeMatch match : group.matchers) {
+            builder.append(MobEquipmentReloadListener.biomeMatchToString(match)).append(" ");
         }
-        
-        @Override
-        public void render(GuiGraphics gfx, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovered, float partialTick) {
-            gfx.drawString(Minecraft.getInstance().font, raw, left + 4, top + 6, 0xFFFFFF);
-        }
-        
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            Minecraft.getInstance().setScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, group));
-            return true;
-        }
-        
-        @Override
-        public Component getNarration() {
-            return Component.literal("");
-        }
+        mc.fontRenderer.drawString(builder.toString(), x + 4, y + 6, 0xFFFFFF);
+    }
+    
+    @Override
+    protected void onEntryClicked(MobEquipmentReloadListener.BiomeGroup group, int index) {
+        mc.displayGuiScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, group));
     }
 }

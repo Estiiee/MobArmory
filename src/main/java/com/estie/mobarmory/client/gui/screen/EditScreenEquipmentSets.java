@@ -2,86 +2,157 @@ package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.EquipmentSetList;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.EquipmentSlot;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import net.minecraft.inventory.EntityEquipmentSlot;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.XRandR;
 
+import java.io.IOException;
 import java.util.EnumMap;
+import java.util.List;
 
-public class EditScreenEquipmentSets extends Screen {
-    
+public class EditScreenEquipmentSets extends GuiScreen {
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
     private final MobEquipmentReloadListener.BiomeGroup biomeGroup;
+    
     private EquipmentSetList list;
     
     private static final int LEFT_PANEL_WIDTH = 120;
     
-    public EditScreenEquipmentSets(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup, MobEquipmentReloadListener.BiomeGroup biomeGroup) {
-        super(Component.literal("Equipment Sets"));
+    public EditScreenEquipmentSets(
+            EditScreenMain main,
+            MobEquipmentReloadListener.DifficultyGroup difficultyGroup,
+            MobEquipmentReloadListener.BiomeGroup biomeGroup) {
+        
         this.main = main;
         this.difficultyGroup = difficultyGroup;
         this.biomeGroup = biomeGroup;
     }
     
     @Override
-    protected void init() {
-        this.list = new EquipmentSetList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
+    public void initGui() {
+        this.list = new EquipmentSetList(
+                this.mc,
+                20,
+                40,
+                this.width - 40,
+                this.height - 100,
+                20,
+                main,
+                difficultyGroup,
+                biomeGroup
+        );
         
-        for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
-            list.children().add(new EquipmentSetList.Entry(set, main, difficultyGroup, biomeGroup));
+        this.list.entries.addAll(biomeGroup.sets);
+        
+        this.buttonList.add(new GuiButton(
+                0,
+                20,
+                this.height - 40,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Add Set"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                1,
+                this.width - LEFT_PANEL_WIDTH - 20,
+                this.height - 40,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Back"
+        ));
+    }
+    
+    @Override
+    protected void actionPerformed(GuiButton button) throws IOException {
+        switch (button.id) {
+            case 0:
+                MobEquipmentReloadListener.EquipmentSet newSet =
+                        new MobEquipmentReloadListener.EquipmentSet(
+                                "Unnamed Set",
+                                1,
+                                new EnumMap<>(
+                                        EntityEquipmentSlot.class
+                                )
+                        );
+                
+                biomeGroup.sets.add(newSet);
+                
+                this.mc.displayGuiScreen(new EditScreenEquipmentSetEntry(
+                        main, difficultyGroup, biomeGroup, newSet
+                ));
+                break;
+            
+            case 1:
+                this.mc.displayGuiScreen(new EditScreenBiomeGroupEntry(
+                        main, difficultyGroup, biomeGroup
+                ));
+                break;
+        }
+    }
+    
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        
+        if (list != null) {
+            list.render(mouseX, mouseY);
         }
         
-        this.addWidget(list);
+        super.drawScreen(mouseX, mouseY, partialTicks);
         
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Add Set"),
-                btn -> {
-                    MobEquipmentReloadListener.EquipmentSet newSet =
-                            new MobEquipmentReloadListener.EquipmentSet("Unnamed Set", 1, new EnumMap<>(EquipmentSlot.class));
-                    
-                    biomeGroup.sets.add(newSet);
-                    this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, newSet));
-                }
-        ).bounds(20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, biomeGroup))
-        ).bounds(this.width - LEFT_PANEL_WIDTH - 20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Equipment sets",
+                this.width / 2,
+                15,
+                0xFFFFFF
+        );
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        list.render(gfx, mouseX, mouseY, partialTick);
-        super.render(gfx, mouseX, mouseY, partialTick);
-        gfx.drawCenteredString(this.font, "Equipment sets", this.width / 2, 15, 0xFFFFFF);
-    }
-    
-    @Override
-    public boolean shouldCloseOnEsc() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo(
+                    (result, id) -> {
+                        if (result) mc.displayGuiScreen(null);
+                        else mc.displayGuiScreen(EditScreenEquipmentSets.this);
                     },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+                    "Exit Editor",
+                    "Are you sure you want to exit? Unsaved changes will be lost.",
+                    0
             ));
-            return true;
+            return;
         }
         
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
+    }
+    
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (list != null && list.mouseClicked(mouseX, mouseY, mouseButton)) {
+            return;
+        }
+        
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+    
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        
+        if (list != null) {
+            list.mouseScrolled(Mouse.getEventDWheel());
+        }
     }
 }

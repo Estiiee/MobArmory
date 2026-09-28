@@ -1,17 +1,16 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import org.lwjgl.input.Keyboard;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-public class EditScreenDifficultyMatcher extends Screen {
+public class EditScreenDifficultyMatcher extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup group;
@@ -20,8 +19,10 @@ public class EditScreenDifficultyMatcher extends Screen {
     
     private static final int LEFT_PANEL_WIDTH = 120;
     
-    public EditScreenDifficultyMatcher(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup group) {
-        super(Component.literal("Edit Matchers"));
+    public EditScreenDifficultyMatcher(
+            EditScreenMain main,
+            MobEquipmentReloadListener.DifficultyGroup group) {
+        
         this.main = main;
         this.group = group;
         
@@ -29,79 +30,128 @@ public class EditScreenDifficultyMatcher extends Screen {
     }
     
     @Override
-    protected void init() {
+    public void initGui() {
         int leftX = 20;
         int y = 40;
         
-        for (MobEquipmentReloadListener.DifficultyLevel lvl : MobEquipmentReloadListener.DifficultyLevel.values()) {
+        for (MobEquipmentReloadListener.DifficultyLevel lvl :
+                MobEquipmentReloadListener.DifficultyLevel.values()) {
             
-            Button btn = Button.builder(
-                    Component.literal(lvl.name()),
-                    b -> {
-                        if (selected.contains(lvl)) selected.remove(lvl);
-                        else selected.add(lvl);
-                        updateButtonColor(b, lvl);
-                    }
-            ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build();
+            GuiButton button = new GuiButton(
+                    lvl.ordinal(),
+                    leftX,
+                    y,
+                    LEFT_PANEL_WIDTH,
+                    20,
+                    lvl.name()
+            );
             
-            updateButtonColor(btn, lvl);
-            this.addRenderableWidget(btn);
+            updateButtonColor(button, lvl);
+            this.buttonList.add(button);
             
             y += 24;
         }
         
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Save"),
-                btn -> {
-                    group.matchers.clear();
-                    group.matchers.addAll(selected);
-                    if (group.matchers.isEmpty()) group.matchers.add(MobEquipmentReloadListener.DifficultyLevel.GLOBAL);
-                    this.minecraft.setScreen(new EditScreenDifficultyGroupEntry(main, group));
-                }
-        ).bounds(leftX, y + 10, LEFT_PANEL_WIDTH, 20).build());
+        this.buttonList.add(new GuiButton(
+                100,
+                leftX,
+                y + 10,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Save"
+        ));
         
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenDifficultyGroupEntry(main, group))
-        ).bounds(leftX, y + 34, LEFT_PANEL_WIDTH, 20).build());
-    }
-    
-    private void updateButtonColor(Button btn, MobEquipmentReloadListener.DifficultyLevel lvl) {
-        if (selected.contains(lvl)) btn.setFGColor(0x00FF00);
-        else btn.setFGColor(0xFF4444);
+        this.buttonList.add(new GuiButton(
+                101,
+                leftX,
+                y + 34,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Back"
+        ));
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        super.render(gfx, mouseX, mouseY, partialTick);
+    protected void actionPerformed(GuiButton button) {
+        if (button.id >= 0 &&
+                button.id < MobEquipmentReloadListener.DifficultyLevel.values().length) {
+            
+            MobEquipmentReloadListener.DifficultyLevel lvl =
+                    MobEquipmentReloadListener.DifficultyLevel.values()[button.id];
+            
+            if (selected.contains(lvl)) {
+                selected.remove(lvl);
+            } else {
+                selected.add(lvl);
+            }
+            
+            updateButtonColor(button, lvl);
+            return;
+        }
         
-        gfx.drawCenteredString(this.font,
+        if (button.id == 100) {
+            group.matchers.clear();
+            group.matchers.addAll(selected);
+            
+            if (group.matchers.isEmpty()) {
+                group.matchers.add(
+                        MobEquipmentReloadListener.DifficultyLevel.GLOBAL
+                );
+            }
+            
+            this.mc.displayGuiScreen(
+                    new EditScreenDifficultyGroupEntry(main, group)
+            );
+            
+        } else if (button.id == 101) {
+            this.mc.displayGuiScreen(
+                    new EditScreenDifficultyGroupEntry(main, group)
+            );
+        }
+    }
+    
+    private void updateButtonColor(
+            GuiButton button,
+            MobEquipmentReloadListener.DifficultyLevel lvl) {
+        
+        if (selected.contains(lvl)) {
+            button.packedFGColour = 0x00FF00;
+        } else {
+            button.packedFGColour = 0xFF4444;
+        }
+    }
+    
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        super.drawScreen(mouseX, mouseY, partialTicks);
+        
+        this.drawCenteredString(
+                this.fontRenderer,
                 "Toggle difficulty matchers",
                 this.width / 2,
                 15,
-                0xFFFFFF);
+                0xFFFFFF
+        );
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
-                    },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo(
+                    (result, id) -> {
+                        if (result) mc.displayGuiScreen(null);
+                        else mc.displayGuiScreen(EditScreenDifficultyMatcher.this);
+                    }, "Exit Editor", "Are you sure you want to exit? Unsaved changes will be lost.", 0
             ));
-            return true;
+            return;
         }
         
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
     }
 }

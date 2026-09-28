@@ -76,9 +76,3 @@ publishing {
         }
     }
 }
-
-sourceSets.each {
-    def dir = layout.buildDirectory.file("sourcesSets/$it.name").get().asFile
-    it.output.resourcesDir = dir
-    it.java.outputDir = dir
-}

@@ -2,14 +2,15 @@ package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.BiomeMatcherList;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
-public class EditScreenBiomeMatchers extends Screen {
+import java.io.IOException;
+
+public class EditScreenBiomeMatchers extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
@@ -19,75 +20,79 @@ public class EditScreenBiomeMatchers extends Screen {
     private static final int LEFT_PANEL_WIDTH = 200;
     
     public EditScreenBiomeMatchers(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup, MobEquipmentReloadListener.BiomeGroup biomeGroup) {
-        super(Component.literal("Edit Matchers"));
         this.main = main;
         this.difficultyGroup = difficultyGroup;
         this.biomeGroup = biomeGroup;
     }
     
     @Override
-    protected void init() {
-        this.list = new BiomeMatcherList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
-        
-        for (MobEquipmentReloadListener.BiomeMatch match : biomeGroup.matchers) {
-            list.children().add(new BiomeMatcherList.Entry(biomeGroup, match,
-                    () -> this.minecraft.setScreen(new EditScreenBiomeMatchers(main, difficultyGroup, biomeGroup))));
-        }
-        
-        this.addWidget(list);
+    public void initGui() {
+        this.list = new BiomeMatcherList(this.mc, 20, 40, this.width - 40, this.height - 100, 20,
+                biomeGroup, () -> this.mc.displayGuiScreen(new EditScreenBiomeMatchers(main, difficultyGroup, biomeGroup)));
+        this.list.entries.addAll(biomeGroup.matchers);
         
         int leftX = 20;
         int btnWidth = LEFT_PANEL_WIDTH / 2 - 5;
         
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Add Matcher"),
-                btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this,
-                        "Add Matcher (global / #tag / minecraft:biome_id)",
-                        "",
-                        value -> {
-                            try {
-                                biomeGroup.matchers.add(MobEquipmentReloadListener.parseBiomeMatch(value));
-                            } catch (Exception ignored) {}
-                            this.minecraft.setScreen(new EditScreenBiomeMatchers(main, difficultyGroup, biomeGroup));
-                        }
-                ))
-        ).bounds(leftX, this.height - 40, btnWidth, 20).build());
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, biomeGroup))
-        ).bounds(leftX + btnWidth + 10, this.height - 40, btnWidth, 20).build());
+        this.buttonList.add(new GuiButton(0, leftX, this.height - 40, btnWidth, 20, "Add Matcher"));
+        this.buttonList.add(new GuiButton(1, leftX + btnWidth + 10, this.height - 40, btnWidth, 20, "Back"));
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        list.render(gfx, mouseX, mouseY, partialTick);
-        super.render(gfx, mouseX, mouseY, partialTick);
-        
-        gfx.drawCenteredString(this.font, "Biome matchers", this.width / 2, 15, 0xFFFFFF);
+    protected void actionPerformed(GuiButton button) {
+        if (button.id == 0) {
+            this.mc.displayGuiScreen(new TextInputScreen(
+                    this,
+                    "Add Matcher (global / TAG_NAME / minecraft:biome_id)",
+                    "",
+                    value -> {
+                        try {
+                            biomeGroup.matchers.add(MobEquipmentReloadListener.parseBiomeMatch(value));
+                        } catch (Exception ignored) {}
+                        this.mc.displayGuiScreen(new EditScreenBiomeMatchers(main, difficultyGroup, biomeGroup));
+                    }
+            ));
+        } else if (button.id == 1) {
+            this.mc.displayGuiScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, biomeGroup));
+        }
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        list.render(mouseX, mouseY);
+        super.drawScreen(mouseX, mouseY, partialTicks);
+        
+        this.drawCenteredString(this.fontRenderer, "Biome matchers", this.width / 2, 15, 0xFFFFFF);
+    }
+    
+    @Override
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
-                    },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
-            ));
-            return true;
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo((result, id) -> {
+                if (result) mc.displayGuiScreen(null);
+                else mc.displayGuiScreen(EditScreenBiomeMatchers.this);
+            }, "Exit Editor", "Are you sure you want to exit? Unsaved changes will be lost.", 0));
+            return;
         }
-        
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
+    }
+    
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (list.mouseClicked(mouseX, mouseY, mouseButton)) return;
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+    
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel != 0) list.mouseScrolled(wheel > 0 ? 1 : -1);
     }
 }

@@ -23,6 +23,7 @@ public class MobArmory {
     
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
+        Config.init(event.getModConfigurationDirectory());
         PacketHandler.register();
     }
     
@@ -33,7 +34,7 @@ public class MobArmory {
     
     @Mod.EventHandler
     public void serverStarting(FMLServerStartingEvent event) {
-        //MobEquipmentReloadListener.reload();
+        MobEquipmentReloadListener.reload();
         event.registerServerCommand(new MobArmoryCommands());
     }
 }

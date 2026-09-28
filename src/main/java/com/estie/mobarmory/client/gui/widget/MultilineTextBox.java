@@ -1,32 +1,44 @@
 package com.estie.mobarmory.client.gui.widget;
 
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.narration.NarratedElementType;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.network.chat.Component;
-import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.Mth;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.util.math.MathHelper;
+import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class MultilineTextBox extends AbstractWidget {
+public class MultilineTextBox {
     private static final int MAX_LENGTH = 4096;
     
-    private final Font font;
+    private final FontRenderer font;
+    private final int x;
+    private final int y;
+    private final int width;
+    private final int height;
+    
     private final StringBuilder text = new StringBuilder();
     
     private int cursorPos = 0;
+    private boolean focused = false;
     
-    public MultilineTextBox(Font font, int x, int y, int width, int height, String initial) {
-        super(x, y, width, height, Component.literal(""));
+    public MultilineTextBox(
+            FontRenderer font,
+            int x,
+            int y,
+            int width,
+            int height,
+            String initial) {
+        
         this.font = font;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
         
         if (initial != null) {
-            text.append(initial);
+            text.append(initial, 0, Math.min(initial.length(), MAX_LENGTH));
             cursorPos = text.length();
         }
     }
@@ -45,27 +57,14 @@ public class MultilineTextBox extends AbstractWidget {
         cursorPos = text.length();
     }
     
-    private List<FormattedCharSequence> wrappedLines() {
-        List<FormattedCharSequence> result = new ArrayList<>();
-        int innerWidth = this.width - 8;
-        
-        for (String rawLine : text.toString().split("\n", -1)) {
-            if (rawLine.isEmpty()) {
-                result.add(FormattedCharSequence.EMPTY);
-            } else {
-                result.addAll(font.split(Component.literal(rawLine), innerWidth));
-            }
-        }
-        
-        return result;
+    public void setFocused(boolean focused) {
+        this.focused = focused;
     }
     
-    /**
-     * Returns the raw-string index where a visual line begins.
-     * <p>
-     * This is needed because font.split() can wrap a single raw line
-     * into multiple visual lines.
-     */
+    public boolean isFocused() {
+        return focused;
+    }
+    
     private List<LineInfo> getLines() {
         List<LineInfo> result = new ArrayList<>();
         int innerWidth = this.width - 8;
@@ -89,21 +88,18 @@ public class MultilineTextBox extends AbstractWidget {
             if (rawLine.isEmpty()) {
                 result.add(new LineInfo(rawStart, rawEnd, ""));
             } else {
-                List<FormattedCharSequence> wrapped =
-                        font.split(Component.literal(rawLine), innerWidth);
+                List<String> wrapped = font.listFormattedStringToWidth(rawLine, innerWidth);
                 
                 int offset = 0;
                 
-                for (FormattedCharSequence line : wrapped) {
-                    String plain = getPlainText(line);
-                    
+                for (String line : wrapped) {
                     result.add(new LineInfo(
                             rawStart + offset,
-                            rawStart + offset + plain.length(),
-                            plain
+                            rawStart + offset + line.length(),
+                            line
                     ));
                     
-                    offset += plain.length();
+                    offset += line.length();
                 }
             }
             
@@ -115,17 +111,6 @@ public class MultilineTextBox extends AbstractWidget {
         }
         
         return result;
-    }
-    
-    private String getPlainText(FormattedCharSequence sequence) {
-        StringBuilder result = new StringBuilder();
-        
-        sequence.accept((index, style, codePoint) -> {
-            result.appendCodePoint(codePoint);
-            return true;
-        });
-        
-        return result.toString();
     }
     
     private int getLineForCursor(List<LineInfo> lines) {
@@ -140,55 +125,47 @@ public class MultilineTextBox extends AbstractWidget {
         return Math.max(0, lines.size() - 1);
     }
     
-    @Override
-    protected void renderWidget(
-            GuiGraphics gfx,
-            int mouseX,
-            int mouseY,
-            float partialTick
-    ) {
-        gfx.fill(
-                getX(),
-                getY(),
-                getX() + width,
-                getY() + height,
+    public void draw() {
+        Gui.drawRect(
+                x,
+                y,
+                x + width,
+                y + height,
                 0xFF000000
         );
         
-        gfx.renderOutline(
-                getX(),
-                getY(),
-                width,
-                height,
-                isFocused() ? 0xFFFFFFFF : 0xFF808080
-        );
+        int borderColor = focused ? 0xFFFFFFFF : 0xFF808080;
+        
+        Gui.drawRect(x, y, x + width, y + 1, borderColor);
+        Gui.drawRect(x, y + height - 1, x + width, y + height, borderColor);
+        Gui.drawRect(x, y, x + 1, y + height, borderColor);
+        Gui.drawRect(x + width - 1, y, x + width, y + height, borderColor);
         
         List<LineInfo> lines = getLines();
         
-        int lineY = getY() + 4;
+        int lineY = y + 4;
         
         for (LineInfo line : lines) {
-            if (lineY + font.lineHeight > getY() + height) {
+            if (lineY + font.FONT_HEIGHT > y + height) {
                 break;
             }
             
-            gfx.drawString(
-                    font,
-                    Component.literal(line.text),
-                    getX() + 4,
+            font.drawString(
+                    line.text,
+                    x + 4,
                     lineY,
                     0xFFFFFF
             );
             
-            lineY += font.lineHeight;
+            lineY += font.FONT_HEIGHT;
         }
         
-        if (isFocused() && (System.currentTimeMillis() / 500) % 2 == 0) {
-            drawCursor(gfx, lines);
+        if (focused && (System.currentTimeMillis() / 500) % 2 == 0) {
+            drawCursor(lines);
         }
     }
     
-    private void drawCursor(GuiGraphics gfx, List<LineInfo> lines) {
+    private void drawCursor(List<LineInfo> lines) {
         if (lines.isEmpty()) {
             return;
         }
@@ -203,44 +180,27 @@ public class MultilineTextBox extends AbstractWidget {
         
         String beforeCursor = line.text.substring(0, localPos);
         
-        int cursorX = getX() + 4 + font.width(beforeCursor);
-        int cursorY = getY() + 4 + lineIndex * font.lineHeight;
+        int cursorX = x + 4 + font.getStringWidth(beforeCursor);
+        int cursorY = y + 4 + lineIndex * font.FONT_HEIGHT;
         
-        gfx.fill(
+        Gui.drawRect(
                 cursorX,
                 cursorY,
                 cursorX + 1,
-                cursorY + font.lineHeight,
+                cursorY + font.FONT_HEIGHT,
                 0xFFFFFFFF
         );
     }
     
-    @Override
-    public boolean charTyped(char chr, int modifiers) {
-        if (!isFocused() || text.length() >= MAX_LENGTH) {
+    public boolean keyTyped(char typedChar, int keyCode) {
+        if (!focused) {
             return false;
         }
         
-        if (chr == '\n' || chr == '\r') {
-            return false;
-        }
-        
-        text.insert(cursorPos, chr);
-        cursorPos++;
-        
-        return true;
-    }
-    
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!isFocused()) {
-            return false;
-        }
-        
-        boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
+        boolean ctrl = GuiScreen.isCtrlKeyDown();
         
         switch (keyCode) {
-            case GLFW.GLFW_KEY_BACKSPACE -> {
+            case Keyboard.KEY_BACK:
                 if (cursorPos > 0) {
                     int start = ctrl
                             ? getPreviousWordBoundary(cursorPos)
@@ -251,9 +211,8 @@ public class MultilineTextBox extends AbstractWidget {
                 }
                 
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_DELETE -> {
+            case Keyboard.KEY_DELETE:
                 if (cursorPos < text.length()) {
                     int end = ctrl
                             ? getNextWordBoundary(cursorPos)
@@ -263,9 +222,8 @@ public class MultilineTextBox extends AbstractWidget {
                 }
                 
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_LEFT -> {
+            case Keyboard.KEY_LEFT:
                 if (ctrl) {
                     cursorPos = getPreviousWordBoundary(cursorPos);
                 } else if (cursorPos > 0) {
@@ -273,9 +231,8 @@ public class MultilineTextBox extends AbstractWidget {
                 }
                 
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_RIGHT -> {
+            case Keyboard.KEY_RIGHT:
                 if (ctrl) {
                     cursorPos = getNextWordBoundary(cursorPos);
                 } else if (cursorPos < text.length()) {
@@ -283,45 +240,43 @@ public class MultilineTextBox extends AbstractWidget {
                 }
                 
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_HOME -> {
+            case Keyboard.KEY_HOME:
                 cursorPos = getLineStart(cursorPos);
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_END -> {
+            case Keyboard.KEY_END:
                 cursorPos = getLineEnd(cursorPos);
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_UP -> {
+            case Keyboard.KEY_UP:
                 moveCursorVertical(-1);
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_DOWN -> {
+            case Keyboard.KEY_DOWN:
                 moveCursorVertical(1);
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_ENTER,
-                 GLFW.GLFW_KEY_KP_ENTER -> {
+            case Keyboard.KEY_RETURN:
                 if (text.length() < MAX_LENGTH) {
                     text.insert(cursorPos, '\n');
                     cursorPos++;
                 }
                 
                 return true;
-            }
             
-            case GLFW.GLFW_KEY_ESCAPE -> {
-                setFocused(false);
+            case Keyboard.KEY_ESCAPE:
+                focused = false;
                 return true;
-            }
         }
         
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        if (typedChar >= 32 && text.length() < MAX_LENGTH) {
+            text.insert(cursorPos, typedChar);
+            cursorPos++;
+            return true;
+        }
+        
+        return false;
     }
     
     private int getLineStart(int pos) {
@@ -396,9 +351,18 @@ public class MultilineTextBox extends AbstractWidget {
         cursorPos = target.start + targetOffset;
     }
     
-    @Override
-    public void onClick(double mouseX, double mouseY) {
-        setFocused(true);
+    public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
+        if (mouseButton != 0) {
+            return;
+        }
+        
+        if (mouseX < x || mouseX >= x + width
+                || mouseY < y || mouseY >= y + height) {
+            focused = false;
+            return;
+        }
+        
+        focused = true;
         
         List<LineInfo> lines = getLines();
         
@@ -407,9 +371,9 @@ public class MultilineTextBox extends AbstractWidget {
             return;
         }
         
-        int clickedLine = (int)((mouseY - getY() - 4) / font.lineHeight);
+        int clickedLine = (mouseY - y - 4) / font.FONT_HEIGHT;
         
-        clickedLine = Mth.clamp(
+        clickedLine = MathHelper.clamp(
                 clickedLine,
                 0,
                 lines.size() - 1
@@ -417,7 +381,7 @@ public class MultilineTextBox extends AbstractWidget {
         
         LineInfo line = lines.get(clickedLine);
         
-        float relativeX = (float)(mouseX - getX() - 4);
+        int relativeX = mouseX - x - 4;
         
         if (relativeX <= 0) {
             cursorPos = line.start;
@@ -425,13 +389,13 @@ public class MultilineTextBox extends AbstractWidget {
         }
         
         int bestPos = line.start;
-        float bestDistance = Float.MAX_VALUE;
+        int bestDistance = Integer.MAX_VALUE;
         
         for (int i = 0; i <= line.text.length(); i++) {
             String before = line.text.substring(0, i);
-            float x = font.width(before);
+            int stringWidth = font.getStringWidth(before);
             
-            float distance = Math.abs(x - relativeX);
+            int distance = Math.abs(stringWidth - relativeX);
             
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -442,17 +406,15 @@ public class MultilineTextBox extends AbstractWidget {
         cursorPos = bestPos;
     }
     
-    @Override
-    protected void updateWidgetNarration(NarrationElementOutput output) {
-        output.add(
-                NarratedElementType.TITLE,
-                Component.literal("NBT input")
-        );
+    private static class LineInfo {
+        final int start;
+        final int end;
+        final String text;
+        
+        LineInfo(int start, int end, String text) {
+            this.start = start;
+            this.end = end;
+            this.text = text;
+        }
     }
-    
-    private record LineInfo(
-            int start,
-            int end,
-            String text
-    ) {}
 }

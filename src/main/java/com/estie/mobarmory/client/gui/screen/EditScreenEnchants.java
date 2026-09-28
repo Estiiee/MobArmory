@@ -2,27 +2,26 @@ package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.EnchantList;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.EquipmentSlot;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import net.minecraft.inventory.EntityEquipmentSlot;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
+import java.io.IOException;
 import java.util.ArrayList;
 
-public class EditScreenEnchants extends Screen {
+public class EditScreenEnchants extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
     private final MobEquipmentReloadListener.BiomeGroup biomeGroup;
     private final MobEquipmentReloadListener.EquipmentSet set;
-    private final EquipmentSlot slot;
+    private final EntityEquipmentSlot slot;
     private final MobEquipmentReloadListener.WeightedItem item;
     
     private static final int LEFT_PANEL_WIDTH = 120;
-    private static final int PREVIEW_SIZE = 100;
     
     private EnchantList list;
     
@@ -30,9 +29,8 @@ public class EditScreenEnchants extends Screen {
                               MobEquipmentReloadListener.DifficultyGroup difficultyGroup,
                               MobEquipmentReloadListener.BiomeGroup biomeGroup,
                               MobEquipmentReloadListener.EquipmentSet set,
-                              EquipmentSlot slot,
+                              EntityEquipmentSlot slot,
                               MobEquipmentReloadListener.WeightedItem item) {
-        super(Component.literal("Predefined Enchantments"));
         this.main = main;
         this.difficultyGroup = difficultyGroup;
         this.biomeGroup = biomeGroup;
@@ -42,84 +40,162 @@ public class EditScreenEnchants extends Screen {
     }
     
     @Override
-    protected void init() {
-
-        if (item.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined p) {
-            this.list = new EnchantList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
+    public void initGui() {
+        if (item.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined) {
+            MobEquipmentReloadListener.EnchantData.Predefined p =
+                    (MobEquipmentReloadListener.EnchantData.Predefined) item.enchant;
+            
+            this.list = new EnchantList(
+                    this.mc,
+                    20,
+                    40,
+                    this.width - 40,
+                    this.height - 100,
+                    20,
+                    main,
+                    difficultyGroup,
+                    biomeGroup,
+                    set,
+                    slot,
+                    item
+            );
             
             for (int i = 0; i < p.ids().size(); i++) {
-                list.children().add(new EnchantList.Entry(
+                this.list.entries.add(new EnchantList.Entry(
                         p.ids().get(i),
                         p.levels().get(i),
-                        main, difficultyGroup, biomeGroup, set, slot, item, i
+                        i
                 ));
             }
-            
-            this.addWidget(list);
         }
         
         int leftX = 20;
         int rightX = this.width - LEFT_PANEL_WIDTH - 20;
         int y = this.height - 40;
+        
+        this.buttonList.add(new GuiButton(
+                0,
+                leftX,
+                y,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Add Entry"
+        ));
+        
+        this.buttonList.add(new GuiButton(
+                1,
+                rightX,
+                y,
+                LEFT_PANEL_WIDTH,
+                20,
+                "Back"
+        ));
+    }
     
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Add Entry"),
-                btn -> {
-                    MobEquipmentReloadListener.EnchantData.Predefined p;
-                    
-                    if (item.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
-                        p = pre;
-                    } else {
-                        p = new MobEquipmentReloadListener.EnchantData.Predefined(
-                                new ArrayList<>(), new ArrayList<>()
-                        );
-                        item.enchant = p;
-                    }
-                    
-                    p.ids().add("minecraft:unbreaking");
-                    p.levels().add(1);
-                    
-                    this.minecraft.setScreen(new EditScreenEnchants(
-                            main, difficultyGroup, biomeGroup, set, slot, item
-                    ));
+    @Override
+    protected void actionPerformed(GuiButton button) {
+        switch (button.id) {
+            case 0:
+                MobEquipmentReloadListener.EnchantData.Predefined p;
+                
+                if (item.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined) {
+                    p = (MobEquipmentReloadListener.EnchantData.Predefined) item.enchant;
+                } else {
+                    p = new MobEquipmentReloadListener.EnchantData.Predefined(
+                            new ArrayList<>(),
+                            new ArrayList<>()
+                    );
+                    item.enchant = p;
                 }
-        ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
-      
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenEnchantEntry(
+                
+                p.ids().add("minecraft:unbreaking");
+                p.levels().add(1);
+                
+                this.mc.displayGuiScreen(new EditScreenEnchants(
                         main, difficultyGroup, biomeGroup, set, slot, item
-                ))
-        ).bounds(rightX, y, LEFT_PANEL_WIDTH, 20).build());
+                ));
+                break;
+            
+            case 1:
+                this.mc.displayGuiScreen(new EditScreenEnchantEntry(
+                        main, difficultyGroup, biomeGroup, set, slot, item
+                ));
+                break;
+        }
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        if (list != null) list.render(gfx, mouseX, mouseY, partialTick);
-        super.render(gfx, mouseX, mouseY, partialTick);
-        gfx.drawCenteredString(this.font, "Enchantments", this.width / 2, 15, 0xFFFFFF);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        
+        if (list != null) {
+            list.render(mouseX, mouseY);
+        }
+        
+        super.drawScreen(mouseX, mouseY, partialTicks);
+        
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Enchantments",
+                this.width / 2,
+                15,
+                0xFFFFFF
+        );
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo(
+                    (result, id) -> {
+                        if (result) mc.displayGuiScreen(null);
+                        else mc.displayGuiScreen(EditScreenEnchants.this);
                     },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
+                    "Exit Editor",
+                    "Are you sure you want to exit? Unsaved changes will be lost.",
+                    0
             ));
-            return true;
+            return;
         }
         
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
+    }
+    
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (EditScreenShared.breadcrumbClicked(mouseX, mouseY)) return;
+        if (EditScreenShared.mouseClicked(mouseX, mouseY, mouseButton)) return;
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+    
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (EditScreenShared.mouseDragged(mouseX, mouseY)) {
+            return;
+        }
+        
+        super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+    }
+    
+    @Override
+    protected void mouseReleased(int mouseX, int mouseY, int state) {
+        if (EditScreenShared.mouseReleased()) return;
+        super.mouseReleased(mouseX, mouseY, state);
+    }
+    
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        
+        EditScreenShared.mouseScrolled(
+                Mouse.getEventX(),
+                Mouse.getEventY(),
+                Mouse.getEventDWheel()
+        );
     }
 }

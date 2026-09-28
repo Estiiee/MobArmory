@@ -4,53 +4,58 @@ import com.estie.mobarmory.client.gui.screen.EditScreenDifficultyGroupEntry;
 import com.estie.mobarmory.client.gui.screen.EditScreenMain;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.ObjectSelectionList;
-import net.minecraft.network.chat.Component;
 
-import java.util.List;
-
-public class DifficultyGroupList extends ObjectSelectionList<DifficultyGroupList.Entry> {
+public class DifficultyGroupList
+        extends SimpleEntryList<MobEquipmentReloadListener.DifficultyGroup> {
     
-    public DifficultyGroupList(Minecraft mc, int width, int height, int top, int bottom, int itemHeight) {
-        super(mc, width, height, top, bottom, itemHeight);
+    private final EditScreenMain main;
+    
+    public DifficultyGroupList(
+            Minecraft mc,
+            int left,
+            int top,
+            int width,
+            int height,
+            int itemHeight,
+            EditScreenMain main) {
+        
+        super(mc, left, top, width, height, itemHeight);
+        this.main = main;
     }
     
-    public static class Entry extends ObjectSelectionList.Entry<Entry> {
+    @Override
+    protected void renderEntry(
+            MobEquipmentReloadListener.DifficultyGroup group,
+            int index,
+            int x,
+            int y,
+            int rowWidth,
+            boolean hovered) {
         
-        private final MobEquipmentReloadListener.DifficultyGroup group;
-        private final EditScreenMain main;
-        private final String raw;
+        StringBuilder builder = new StringBuilder();
         
-        public Entry(MobEquipmentReloadListener.DifficultyGroup group, EditScreenMain main, List<MobEquipmentReloadListener.DifficultyLevel> difficultyLevels) {
-            this.group = group;
-            this.main = main;
-            StringBuilder builder = new StringBuilder();
-            for (MobEquipmentReloadListener.DifficultyLevel difficultyLevel : difficultyLevels) {
-                builder.append(difficultyLevel.toString());
-                builder.append(" ");
-            }
-            this.raw = builder.toString();
+        for (MobEquipmentReloadListener.DifficultyLevel difficultyLevel :
+                group.matchers) {
+            
+            builder.append(difficultyLevel.toString());
+            builder.append(" ");
         }
         
-        @Override
-        public void render(GuiGraphics gfx, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovered, float partialTick) {
-            gfx.drawString(Minecraft.getInstance().font,
-                    raw,
-                    left + 4,
-                    top + 6,
-                    0xFFFFFF);
-        }
+        mc.fontRenderer.drawString(
+                builder.toString(),
+                x + 4,
+                y + 6,
+                0xFFFFFF
+        );
+    }
+    
+    @Override
+    protected void onEntryClicked(
+            MobEquipmentReloadListener.DifficultyGroup group,
+            int index) {
         
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            Minecraft.getInstance().setScreen(new EditScreenDifficultyGroupEntry(main, group));
-            return true;
-        }
-        
-        @Override
-        public Component getNarration() {
-            return Component.literal("");
-        }
+        mc.displayGuiScreen(
+                new EditScreenDifficultyGroupEntry(main, group)
+        );
     }
 }

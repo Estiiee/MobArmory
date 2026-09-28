@@ -2,18 +2,19 @@ package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.client.gui.widget.BiomeGroupList;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.ConfirmScreen;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiYesNo;
+import net.minecraft.client.gui.GuiYesNoCallback;
+import net.minecraftforge.fml.client.GuiConfirmation;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
 
-public class EditScreenBiomeGroups extends Screen
-{
+public class EditScreenBiomeGroups extends GuiScreen {
     
     private final EditScreenMain main;
     private final MobEquipmentReloadListener.DifficultyGroup difficultyGroup;
@@ -22,70 +23,69 @@ public class EditScreenBiomeGroups extends Screen
     private static final int LEFT_PANEL_WIDTH = 120;
     
     public EditScreenBiomeGroups(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup difficultyGroup) {
-        super(Component.literal("Biome Groups"));
         this.main = main;
         this.difficultyGroup = difficultyGroup;
     }
     
     @Override
-    protected void init() {
+    public void initGui() {
+        this.list = new BiomeGroupList(this.mc, 20, 40, this.width - 40, this.height - 100, 20, main, difficultyGroup);
+        this.list.entries.addAll(difficultyGroup.biomeGroups);
         
-        this.list = new BiomeGroupList(this.minecraft, this.width, this.height, 40, this.height - 60, 20);
-        
-        for (MobEquipmentReloadListener.BiomeGroup group : difficultyGroup.biomeGroups) {
-            list.children().add(new BiomeGroupList.Entry(group, main, difficultyGroup));
+        this.buttonList.add(new GuiButton(0, 20, this.height - 40, LEFT_PANEL_WIDTH, 20, "Add Group"));
+        this.buttonList.add(new GuiButton(1, this.width - LEFT_PANEL_WIDTH - 20, this.height - 40, LEFT_PANEL_WIDTH, 20, "Back"));
+    }
+    
+    @Override
+    protected void actionPerformed(GuiButton button) {
+        if (button.id == 0) {
+            MobEquipmentReloadListener.BiomeGroup newGroup = new MobEquipmentReloadListener.BiomeGroup(
+                    new ArrayList<>(Collections.singletonList(new MobEquipmentReloadListener.BiomeMatch.Global())),
+                    -1.0F,
+                    new ArrayList<>()
+            );
+            difficultyGroup.biomeGroups.add(newGroup);
+            this.mc.displayGuiScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, newGroup));
+        } else if (button.id == 1) {
+            this.mc.displayGuiScreen(new EditScreenDifficultyGroupEntry(main, difficultyGroup));
         }
-        
-        this.addWidget(list);
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Add Group"),
-                btn -> {
-                    MobEquipmentReloadListener.BiomeGroup newGroup =
-                            new MobEquipmentReloadListener.BiomeGroup(
-                                    new ArrayList<>(List.of(new MobEquipmentReloadListener.BiomeMatch.Global())),
-                                    -1.0F,
-                                    new ArrayList<>()
-                            );
-                    
-                    difficultyGroup.biomeGroups.add(newGroup);
-                    this.minecraft.setScreen(new EditScreenBiomeGroupEntry(main, difficultyGroup, newGroup));
-                }
-        ).bounds(20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
-        
-        this.addRenderableWidget(Button.builder(
-                Component.literal("Back"),
-                btn -> this.minecraft.setScreen(new EditScreenDifficultyGroupEntry(main, difficultyGroup))
-        ).bounds(this.width - LEFT_PANEL_WIDTH - 20, this.height - 40, LEFT_PANEL_WIDTH, 20).build());
     }
     
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(gfx);
-        list.render(gfx, mouseX, mouseY, partialTick);
-        super.render(gfx, mouseX, mouseY, partialTick);
-        gfx.drawCenteredString(this.font, "Biome groups", this.width / 2, 15, 0xFFFFFF);
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        this.drawDefaultBackground();
+        list.render(mouseX, mouseY);
+        super.drawScreen(mouseX, mouseY, partialTicks);
+        this.drawCenteredString(this.fontRenderer, "Biome groups", this.width / 2, 15, 0xFFFFFF);
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+        if (list.mouseClicked(mouseX, mouseY, mouseButton)) return;
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+    }
+    
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel != 0) list.mouseScrolled(wheel > 0 ? 1 : -1);
+    }
+    
+    @Override
+    public boolean doesGuiPauseGame() {
         return false;
     }
     
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> {
-                        if (confirmed) this.minecraft.setScreen(null);
-                        else this.minecraft.setScreen(this);
-                    },
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
-            ));
-            return true;
+    protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            this.mc.displayGuiScreen(new GuiYesNo((result, id) -> {
+                if (result) mc.displayGuiScreen(null);
+                else mc.displayGuiScreen(EditScreenBiomeGroups.this);
+            }, "Exit Editor", "Are you sure you want to exit? Unsaved changes will be lost.", 0));
+            return;
         }
-        
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        super.keyTyped(typedChar, keyCode);
     }
 }

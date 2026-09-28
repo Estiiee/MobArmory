@@ -3,37 +3,20 @@ package com.estie.mobarmory.client.gui.widget;
 import com.estie.mobarmory.handlers.PacketHandler;
 import com.estie.mobarmory.packet.LoadMobEquipmentEntryPacket;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractSelectionList;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 
-public class LookupListWidget extends AbstractSelectionList<LookupListWidget.Entry> {
+public class LookupListWidget extends SimpleEntryList<String> {
     
-    public LookupListWidget(Minecraft mc, int width, int height, int top, int bottom, int itemHeight) {
-        super(mc, width, height, top, bottom, itemHeight);
+    public LookupListWidget(Minecraft mc, int left, int top, int width, int height, int itemHeight) {
+        super(mc, left, top, width, height, itemHeight);
     }
     
     @Override
-    public void updateNarration(NarrationElementOutput narration) {}
+    protected void renderEntry(String fileName, int index, int x, int y, int rowWidth, boolean hovered) {
+        mc.fontRenderer.drawString(fileName, x + 4, y + 4, 0xFFFFFF);
+    }
     
-    public static class Entry extends AbstractSelectionList.Entry<Entry> {
-        
-        private final String fileName;
-        
-        public Entry(String fileName) {
-            this.fileName = fileName;
-        }
-        
-        
-        @Override
-        public void render(GuiGraphics gfx, int index, int y, int x, int width, int height, int mouseX, int mouseY, boolean hovered, float partialTick) {
-            gfx.drawString(Minecraft.getInstance().font, fileName, x + 4, y + 4, 0xFFFFFF);
-        }
-        
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            PacketHandler.INSTANCE.sendToServer(new LoadMobEquipmentEntryPacket(fileName));
-            return true;
-        }
+    @Override
+    protected void onEntryClicked(String fileName, int index) {
+        PacketHandler.INSTANCE.sendToServer(new LoadMobEquipmentEntryPacket(fileName));
     }
 }

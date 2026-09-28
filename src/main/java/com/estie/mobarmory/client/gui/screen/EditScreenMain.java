@@ -58,7 +58,7 @@ public class EditScreenMain extends Screen {
                     this.minecraft.setScreen(new TextInputScreen(this, "Set Chance (0.0 - 1.0)", "" + entry.chance, value -> {
                         try {
                             float f = Float.parseFloat(value);
-                            entry.chance = Mth.clamp(f, 0f, 1f);
+                            entry.chance = Mth.clamp(f, -1f, 1f);
                             updateBuilder();
                         } catch (Exception ignored) {}
                     }));
@@ -103,7 +103,8 @@ public class EditScreenMain extends Screen {
         
         // --- INFO UNDER PREVIEW ---
         float chance = entry.chance;
-        String chanceLabel = "Chance: " + (int)(chance * 100) + "%";
+        String val = entry.chance < 0.0F ? "Not Set" : (int)(chance * 100) + "%";
+        String chanceLabel = "Chance: " + val;
         gfx.drawCenteredString(this.font, chanceLabel,
                 infoX,
                 infoY + 12,

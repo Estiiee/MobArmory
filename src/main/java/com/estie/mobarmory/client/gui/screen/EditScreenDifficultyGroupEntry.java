@@ -110,8 +110,16 @@ public class EditScreenDifficultyGroupEntry extends Screen {
         
         int usedHeight = dy;
         
+        float effectiveChance = EditScreenShared.hasOverride(difficultyGroup.chance)
+                ? difficultyGroup.chance
+                : main.entry.chance;
+        
+        String chanceVal = effectiveChance < 0.0F
+                ? "Not Set"
+                : (int)(effectiveChance * 100) + "%";
+        
         gfx.drawCenteredString(this.font,
-                "Chance: " + (int)((EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance) * 100) + "%",
+                "Chance: " + chanceVal,
                 previewX + PREVIEW_SIZE / 2,
                 infoY + usedHeight + 4,
                 0xAAAAAA);

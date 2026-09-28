@@ -32,6 +32,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Mod.EventBusSubscriber(modid = MobArmory.MODID)
@@ -51,39 +52,45 @@ public class EquipmentHandler {
         if (entry == null) return;
         
         MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(mob.level());
-        MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = null;
+        
+        List<MobEquipmentReloadListener.DifficultyGroup> matchingDifficultyGroups = new ArrayList<>();
         
         for (MobEquipmentReloadListener.DifficultyGroup group : entry.difficultyGroups) {
             boolean matches = false;
             boolean globalGroup = false;
             
             for (MobEquipmentReloadListener.DifficultyLevel matcher : group.matchers) {
-                if (matcher == MobEquipmentReloadListener.DifficultyLevel.GLOBAL) globalGroup = true;
-                else if (matcher == currentDifficulty) {
+                if (matcher == MobEquipmentReloadListener.DifficultyLevel.GLOBAL) {
+                    globalGroup = true;
+                } else if (matcher == currentDifficulty) {
                     matches = true;
                     break;
                 }
             }
             
             if (matches || globalGroup) {
-                chosenDifficultyGroup = group;
-                break;
+                matchingDifficultyGroups.add(group);
             }
         }
         
+        if (matchingDifficultyGroups.isEmpty()) return;
+        
+        MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = matchingDifficultyGroups.get(mob.getRandom().nextInt(matchingDifficultyGroups.size()));
         if (chosenDifficultyGroup == null) return;
         
         Holder<Biome> biomeHolder = mob.level().getBiome(mob.blockPosition());
         ResourceKey<Biome> biomeKey = biomeHolder.unwrapKey().orElse(null);
         
-        MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
+        List<MobEquipmentReloadListener.BiomeGroup> matchingBiomeGroups = new ArrayList<>();
         
         for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups) {
             boolean matches = false;
             boolean globalGroup = false;
             
             for (MobEquipmentReloadListener.BiomeMatch matcher : group.matchers) {
-                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Global) globalGroup = true;
+                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Global) {
+                    globalGroup = true;
+                }
                 
                 if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Id idMatch) {
                     if (biomeKey != null && biomeKey.location().equals(idMatch.id())) {
@@ -101,9 +108,18 @@ public class EquipmentHandler {
             }
             
             if (matches || globalGroup) {
-                chosenBiomeGroup = group;
-                break;
+                matchingBiomeGroups.add(group);
             }
+        }
+        
+        if (matchingBiomeGroups.isEmpty() && chosenDifficultyGroup.globalSets.isEmpty()) return;
+        
+        MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
+        
+        if (!matchingBiomeGroups.isEmpty()) {
+            chosenBiomeGroup = matchingBiomeGroups.get(
+                    mob.getRandom().nextInt(matchingBiomeGroups.size())
+            );
         }
         
         List<MobEquipmentReloadListener.EquipmentSet> candidateSets;
@@ -112,11 +128,9 @@ public class EquipmentHandler {
         if (chosenBiomeGroup != null) {
             candidateSets = chosenBiomeGroup.sets;
             biomeGroupChance = chosenBiomeGroup.chance;
-        } else if (!chosenDifficultyGroup.globalSets.isEmpty()) {
+        } else {
             candidateSets = chosenDifficultyGroup.globalSets;
             biomeGroupChance = null;
-        } else {
-            return;
         }
         
         float effectiveChance = hasOverride(biomeGroupChance) ? biomeGroupChance :

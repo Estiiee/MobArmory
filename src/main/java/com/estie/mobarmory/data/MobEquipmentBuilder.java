@@ -16,7 +16,7 @@ import java.util.*;
 public class MobEquipmentBuilder {
     
     private ResourceLocation mob;
-    private float chance = 1.0f;
+    private float chance = -1.0f;
     
     private final List<DifficultyGroupBuilder> difficultyGroups = new ArrayList<>();
     

@@ -73,7 +73,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             //matching within a merged difficulty group is order-dependent (first match-or-global wins)
             files.sort(Comparator.comparing(f -> f.fileId().toString()));
             
-            float mobChance = 1.0F;
+            float mobChance = -1.0F;
             Map<List<DifficultyLevel>, DifficultyGroup> merged = new LinkedHashMap<>();
             
             for (JsonFile file : files) {
@@ -81,8 +81,8 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                     JsonObject json = file.json();
                     
                     //each file's own declared chance, independent of the merged mob-level value below
-                    float fileChance = GsonHelper.getAsFloat(json, "chance", 1.0F);
-                    mobChance = GsonHelper.getAsFloat(json, "chance", mobChance);
+                    float fileChance = GsonHelper.getAsFloat(json, "chance", -1.0F);
+                    if (mobChance < 0.0F && fileChance >= 0.0F) mobChance = fileChance;
                     
                     List<DifficultyGroup> groups;
                     
@@ -121,7 +121,8 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                         if (existing == null) {
                             merged.put(key, g);
                         } else {
-                            Float mergedChance = g.chance != null ? g.chance : existing.chance;
+                            //similar to top level chance, the first to define the chance for given difficulty group wins
+                            Float mergedChance = existing.chance != null ? existing.chance : g.chance;
                             
                             List<BiomeGroup> mergedBiomes = new ArrayList<>(existing.biomeGroups);
                             mergedBiomes.addAll(g.biomeGroups);
@@ -137,6 +138,11 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                 }
             }
             
+            //the top level chance is determined by the first in order file defining a non-negative value
+            //-1 is used for skipping files from defining a top level chance. if no file defines any chance for a given mob,
+            //0 is used (mob disabled). however, even with it set to 0 mobs can still spawn with sets if their respective
+            //biome/difficulty groups define their own non-zero chances
+            if (mobChance < 0.0F) mobChance = 0.0F;
             parsed.put(mobId, new MobEquipmentEntry(null, mobId, mobChance, new ArrayList<>(merged.values())));
         }
         

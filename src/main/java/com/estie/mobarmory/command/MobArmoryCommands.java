@@ -50,7 +50,7 @@ public class MobArmoryCommands {
         }
         
         MobEquipmentReloadListener.MobEquipmentEntry blank =
-                new MobEquipmentReloadListener.MobEquipmentEntry(null, null, 1.0f, new ArrayList<>());
+                new MobEquipmentReloadListener.MobEquipmentEntry(null, null, -1.0f, new ArrayList<>());
         
         PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new OpenEditScreenPacket(blank));
         

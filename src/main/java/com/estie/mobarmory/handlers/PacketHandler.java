@@ -4,26 +4,19 @@ import com.estie.mobarmory.MobArmory;
 import com.estie.mobarmory.packet.LoadMobEquipmentEntryPacket;
 import com.estie.mobarmory.packet.OpenEditScreenPacket;
 import com.estie.mobarmory.packet.OpenLookupScreenPacket;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.simple.SimpleChannel;
+import net.minecraftforge.fml.common.network.NetworkRegistry;
+import net.minecraftforge.fml.common.network.simpleimpl.SimpleNetworkWrapper;
+import net.minecraftforge.fml.relauncher.Side;
 
 public class PacketHandler {
-    public static final String PROTOCOL_VERSION = "1";
-    public static SimpleChannel INSTANCE;
+    public static SimpleNetworkWrapper INSTANCE;
     
     public static void register() {
-        INSTANCE = NetworkRegistry.newSimpleChannel(
-                new ResourceLocation(MobArmory.MODID, "main"),
-                () -> PROTOCOL_VERSION,
-                PROTOCOL_VERSION::equals,
-                PROTOCOL_VERSION::equals
-        );
+        INSTANCE = NetworkRegistry.INSTANCE.newSimpleChannel(MobArmory.MODID);
         
         int id = 0;
-        
-        INSTANCE.registerMessage(id++, OpenLookupScreenPacket.class, OpenLookupScreenPacket::encode, OpenLookupScreenPacket::decode, OpenLookupScreenPacket::handle);
-        INSTANCE.registerMessage(id++, LoadMobEquipmentEntryPacket.class, LoadMobEquipmentEntryPacket::encode, LoadMobEquipmentEntryPacket::decode, LoadMobEquipmentEntryPacket::handle);
-        INSTANCE.registerMessage(id++, OpenEditScreenPacket.class, OpenEditScreenPacket::encode, OpenEditScreenPacket::decode, OpenEditScreenPacket::handle);
+        INSTANCE.registerMessage(OpenLookupScreenPacket.Handler.class, OpenLookupScreenPacket.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(OpenEditScreenPacket.Handler.class, OpenEditScreenPacket.class, id++, Side.CLIENT);
+        INSTANCE.registerMessage(LoadMobEquipmentEntryPacket.Handler.class, LoadMobEquipmentEntryPacket.class, id++, Side.SERVER);
     }
 }

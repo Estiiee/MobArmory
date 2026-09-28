@@ -1,48 +1,59 @@
 package com.estie.mobarmory.packet;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.estie.mobarmory.client.gui.screen.EditScreenMain;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.fml.common.network.ByteBufUtils;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
+import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
+import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
-import java.util.function.Supplier;
+import java.nio.charset.StandardCharsets;
 
-public class OpenEditScreenPacket {
+public class OpenEditScreenPacket implements IMessage {
+    private String fileName;
+    private String json;
     
-    private final String fileName;
-    private final String json;
+    public OpenEditScreenPacket() {}
     
     public OpenEditScreenPacket(MobEquipmentReloadListener.MobEquipmentEntry entry) {
         this.fileName = entry.fileName;
         this.json = MobEquipmentReloadListener.toJson(entry).toString();
     }
     
-    private OpenEditScreenPacket(String fileName, String json) {
-        this.fileName = fileName;
-        this.json = json;
+    @Override
+    public void toBytes(ByteBuf buf) {
+        buf.writeBoolean(fileName != null);
+        if (fileName != null) ByteBufUtils.writeUTF8String(buf, fileName);
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        buf.writeInt(bytes.length);
+        buf.writeBytes(bytes);
     }
     
-    public static void encode(OpenEditScreenPacket msg, FriendlyByteBuf buf) {
-        buf.writeBoolean(msg.fileName != null);
-        if (msg.fileName != null) buf.writeUtf(msg.fileName);
-        buf.writeUtf(msg.json, 32767);
+    @Override
+    public void fromBytes(ByteBuf buf) {
+        fileName = buf.readBoolean() ? ByteBufUtils.readUTF8String(buf) : null;
+        byte[] bytes = new byte[buf.readInt()];
+        buf.readBytes(bytes);
+        json = new String(bytes, StandardCharsets.UTF_8);
     }
     
-    public static OpenEditScreenPacket decode(FriendlyByteBuf buf) {
-        String fileName = buf.readBoolean() ? buf.readUtf() : null;
-        String json = buf.readUtf(32767);
-        return new OpenEditScreenPacket(fileName, json);
-    }
-    
-    public static void handle(OpenEditScreenPacket msg, Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().enqueueWork(() -> {
-            JsonObject obj = JsonParser.parseString(msg.json).getAsJsonObject();
-            MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.fromJson(msg.fileName, obj);
-            Minecraft.getInstance().setScreen(new EditScreenMain(entry));
-        });
-        ctx.get().setPacketHandled(true);
+    public static class Handler implements IMessageHandler<OpenEditScreenPacket, IMessage> {
+        @SideOnly(Side.CLIENT)
+        @Override
+        public IMessage onMessage(OpenEditScreenPacket msg, MessageContext ctx) {
+            Minecraft mc = Minecraft.getMinecraft();
+            mc.addScheduledTask(() -> {
+                JsonObject obj = new JsonParser().parse(msg.json).getAsJsonObject();
+                MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.fromJson(msg.fileName, obj);
+                mc.displayGuiScreen(new EditScreenMain(entry));
+            });
+            return null;
+        }
     }
 }

@@ -1,70 +1,90 @@
 package com.estie.mobarmory.command;
 
 import com.estie.mobarmory.Config;
-import com.estie.mobarmory.MobArmory;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import com.estie.mobarmory.handlers.PacketHandler;
 import com.estie.mobarmory.packet.OpenEditScreenPacket;
 import com.estie.mobarmory.packet.OpenLookupScreenPacket;
-import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.network.PacketDistributor;
+import net.minecraft.command.CommandBase;
+import net.minecraft.command.CommandException;
+import net.minecraft.command.ICommandSender;
+import net.minecraft.command.WrongUsageException;
+import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.text.TextComponentString;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
-@Mod.EventBusSubscriber(modid = MobArmory.MODID)
-public class MobArmoryCommands {
+public class MobArmoryCommands extends CommandBase {
     
-    @SubscribeEvent
-    public static void onRegisterCommands(RegisterCommandsEvent event) {
-        register(event.getDispatcher());
+    @Override
+    public String getName() {
+        return "mobarmory";
     }
     
-    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        
-        dispatcher.register(
-                Commands.literal("mobarmory")
-                        .then(Commands.literal("createnew")
-                                .executes(ctx -> createnew(ctx.getSource()))
-                        )
-                        
-                        .then(Commands.literal("lookup")
-                                .requires(src -> src.getServer().isSingleplayer() || Config.clientAccessible)
-                                .executes(ctx -> lookup(ctx.getSource()))
-                        )
-        );
+    @Override
+    public String getUsage(ICommandSender sender) {
+        return "/mobarmory <createnew|lookup>";
     }
     
-    private static int createnew(CommandSourceStack src) {
-        ServerPlayer player = src.getPlayer();
-        if (player == null) {
-            src.sendFailure(Component.literal("This command can only be used by a player"));
-            return 0;
+    @Override
+    public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException {
+        if (args.length == 0) {
+            throw new WrongUsageException(getUsage(sender));
         }
         
-        MobEquipmentReloadListener.MobEquipmentEntry blank =
-                new MobEquipmentReloadListener.MobEquipmentEntry(null, null, 1.0f, new ArrayList<>());
-        
-        PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new OpenEditScreenPacket(blank));
-        
-        src.sendSuccess(() -> Component.literal("Created new entry"), false);
-        return 1;
+        if ("createnew".equals(args[0])) {
+            createNew(sender);
+        } else if ("lookup".equals(args[0])) {
+            lookup(sender);
+        } else {
+            throw new WrongUsageException(getUsage(sender));
+        }
     }
     
-    private static int lookup(CommandSourceStack src) {
-        ServerPlayer player = src.getPlayer();
-        List<String> fileNames = MobEquipmentReloadListener.LOOKUP_FILES.stream().map(e -> e.fileName).toList();
+    private void createNew(ICommandSender sender) throws CommandException {
+        EntityPlayerMP player = getCommandSenderAsPlayer(sender);
         
-        PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new OpenLookupScreenPacket(fileNames));
+        MobEquipmentReloadListener.MobEquipmentEntry blank =
+                new MobEquipmentReloadListener.MobEquipmentEntry(
+                        null,
+                        null,
+                        1.0f,
+                        new ArrayList<>()
+                );
         
-        src.sendSuccess(() -> Component.literal("Opening lookup window"), false);
-        return 1;
+        PacketHandler.INSTANCE.sendTo(
+                new OpenEditScreenPacket(blank),
+                player
+        );
+        
+        sender.sendMessage(new TextComponentString("Created new entry"));
+    }
+    
+    private void lookup(ICommandSender sender) throws CommandException {
+        EntityPlayerMP player = getCommandSenderAsPlayer(sender);
+        
+        if (!Config.clientAccessible && !sender.canUseCommand(2, getName())) {
+            throw new CommandException("You must be an operator to use this command.");
+        }
+        
+        List<String> fileNames = MobEquipmentReloadListener.LOOKUP_FILES
+                .stream()
+                .map(e -> e.fileName)
+                .collect(Collectors.toList());
+        
+        PacketHandler.INSTANCE.sendTo(
+                new OpenLookupScreenPacket(fileNames),
+                player
+        );
+        
+        sender.sendMessage(new TextComponentString("Opening lookup window"));
+    }
+    
+    @Override
+    public int getRequiredPermissionLevel() {
+        return 0;
     }
 }

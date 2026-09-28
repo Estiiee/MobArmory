@@ -4,54 +4,52 @@ import com.estie.mobarmory.Config;
 import com.estie.mobarmory.MobArmory;
 import com.estie.mobarmory.MobEquipmentSpawnUtil;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
-import net.minecraft.core.Holder;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.effect.MobEffect;
-import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.storage.loot.LootParams;
-import net.minecraft.world.level.storage.loot.LootTable;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
-import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
-import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraft.entity.EntityList;
+import net.minecraft.entity.EntityLiving;
+import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.monster.EntityMob;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.world.storage.loot.LootContext;
+import net.minecraft.world.storage.loot.LootTable;
+import net.minecraftforge.common.BiomeDictionary;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
 @Mod.EventBusSubscriber(modid = MobArmory.MODID)
 public class EquipmentHandler {
     
     @SubscribeEvent
-    public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+    public static void onEntityJoinWorld(EntityJoinWorldEvent event) {
         if (!Config.enabled) return;
-        if (!(event.getEntity() instanceof Mob mob)) return;
-        if (event.getLevel().isClientSide()) return;
-        if (event.loadedFromDisk()) return;
+        if (!(event.getEntity() instanceof EntityLiving)) return;
         
-        ResourceLocation mobId = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+        EntityLiving mob = (EntityLiving) event.getEntity();
+        
+        if (event.getWorld().isRemote) return;
+        
+        if (mob.getEntityData().getBoolean("MobArmory_SpawnFlag")) return;
+        mob.getEntityData().setBoolean("MobArmory_SpawnFlag", true);
+        
+        ResourceLocation mobId = EntityList.getKey(mob);
         if (mobId == null) return;
         
         MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.ENTRIES.get(mobId);
+        
         if (entry == null) return;
         
-        MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(mob.level());
-        MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = null;
+        MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(event.getWorld());
+        List<MobEquipmentReloadListener.DifficultyGroup> matchingDifficultyGroups = new ArrayList<MobEquipmentReloadListener.DifficultyGroup>();
         
         for (MobEquipmentReloadListener.DifficultyGroup group : entry.difficultyGroups) {
             boolean matches = false;
@@ -65,18 +63,20 @@ public class EquipmentHandler {
                 }
             }
             
-            if (matches || globalGroup) {
-                chosenDifficultyGroup = group;
-                break;
-            }
+            if (matches || globalGroup) matchingDifficultyGroups.add(group);
         }
+        
+        if (matchingDifficultyGroups.isEmpty()) return;
+        
+        MobEquipmentReloadListener.DifficultyGroup chosenDifficultyGroup = matchingDifficultyGroups.get(
+                        mob.getRNG().nextInt(matchingDifficultyGroups.size()));
         
         if (chosenDifficultyGroup == null) return;
         
-        Holder<Biome> biomeHolder = mob.level().getBiome(mob.blockPosition());
-        ResourceKey<Biome> biomeKey = biomeHolder.unwrapKey().orElse(null);
+        Biome biome = event.getWorld().getBiome(mob.getPosition());
         
-        MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
+        ResourceLocation biomeId = biome.getRegistryName();
+        List<MobEquipmentReloadListener.BiomeGroup> matchingBiomeGroups = new ArrayList<>();
         
         for (MobEquipmentReloadListener.BiomeGroup group : chosenDifficultyGroup.biomeGroups) {
             boolean matches = false;
@@ -85,26 +85,36 @@ public class EquipmentHandler {
             for (MobEquipmentReloadListener.BiomeMatch matcher : group.matchers) {
                 if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Global) globalGroup = true;
                 
-                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Id idMatch) {
-                    if (biomeKey != null && biomeKey.location().equals(idMatch.id())) {
+                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Id) {
+                    MobEquipmentReloadListener.BiomeMatch.Id idMatch =
+                            (MobEquipmentReloadListener.BiomeMatch.Id) matcher;
+                    
+                    if (biomeId != null && biomeId.equals(idMatch.id())) {
                         matches = true;
                         break;
                     }
                 }
                 
-                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Tag tagMatch) {
-                    if (biomeHolder.tags().anyMatch(t -> t.location().equals(tagMatch.tag()))) {
+                if (matcher instanceof MobEquipmentReloadListener.BiomeMatch.Tag) {
+                    MobEquipmentReloadListener.BiomeMatch.Tag tagMatch = (MobEquipmentReloadListener.BiomeMatch.Tag) matcher;
+                    
+                    BiomeDictionary.Type type = BiomeDictionary.Type.getType(tagMatch.tag());
+                    
+                    if (BiomeDictionary.hasType(biome, type)) {
                         matches = true;
                         break;
                     }
                 }
             }
             
-            if (matches || globalGroup) {
-                chosenBiomeGroup = group;
-                break;
-            }
+            if (matches || globalGroup) matchingBiomeGroups.add(group);
         }
+        
+        if (matchingBiomeGroups.isEmpty() && chosenDifficultyGroup.globalSets.isEmpty()) return;
+        
+        MobEquipmentReloadListener.BiomeGroup chosenBiomeGroup = null;
+        
+        if (!matchingBiomeGroups.isEmpty()) chosenBiomeGroup = matchingBiomeGroups.get(mob.getRNG().nextInt(matchingBiomeGroups.size()));
         
         List<MobEquipmentReloadListener.EquipmentSet> candidateSets;
         Float biomeGroupChance;
@@ -112,31 +122,31 @@ public class EquipmentHandler {
         if (chosenBiomeGroup != null) {
             candidateSets = chosenBiomeGroup.sets;
             biomeGroupChance = chosenBiomeGroup.chance;
-        } else if (!chosenDifficultyGroup.globalSets.isEmpty()) {
+        } else {
             candidateSets = chosenDifficultyGroup.globalSets;
             biomeGroupChance = null;
-        } else {
-            return;
         }
         
-        float effectiveChance = hasOverride(biomeGroupChance) ? biomeGroupChance :
-                hasOverride(chosenDifficultyGroup.chance) ? chosenDifficultyGroup.chance : entry.chance;
+        float effectiveChance =
+                hasOverride(biomeGroupChance) ? biomeGroupChance :
+                        hasOverride(chosenDifficultyGroup.chance)
+                                ? chosenDifficultyGroup.chance
+                                : entry.chance;
         
-        if (mob.getRandom().nextFloat() > effectiveChance) return;
+        if (mob.getRNG().nextFloat() > effectiveChance) return;
         
-        //time-of-day / Y-level eligibility - a set with either restriction that doesn't currently
-        //hold is excluded from the pool entirely, not just deprioritized
-        long currentTime = mob.level().getDayTime();
-        int mobY = mob.blockPosition().getY();
+        long currentTime = event.getWorld().getWorldTime();
+        int mobY = mob.getPosition().getY();
         
-        List<MobEquipmentReloadListener.EquipmentSet> eligible = candidateSets.stream()
-                .filter(s -> s.timeOfDay.matches(currentTime))
-                .filter(s -> s.yLevel.matches(mobY))
-                .toList();
+        List<MobEquipmentReloadListener.EquipmentSet> eligible =
+                candidateSets.stream()
+                        .filter(s -> s.timeOfDay.matches(currentTime))
+                        .filter(s -> s.yLevel.matches(mobY))
+                        .collect(Collectors.toList());
         
         if (eligible.isEmpty()) return;
         
-        MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(eligible, mob.getRandom());
+        MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(eligible, mob.getRNG());
         if (chosenSet == null) return;
         
         MobEquipmentSpawnUtil.applyEquipmentSet(mob, chosenSet);
@@ -144,30 +154,23 @@ public class EquipmentHandler {
     
     @SubscribeEvent
     public static void onLivingDrops(LivingDropsEvent event) {
-        if (!(event.getEntity() instanceof Mob mob)) return;
+        if (!(event.getEntityLiving() instanceof EntityMob)) return;
+        EntityMob mob = (EntityMob) event.getEntityLiving();
+        if (!(mob.world instanceof WorldServer)) return;
+        if (!mob.getEntityData().hasKey("MobArmoryLootTable")) return;
         
-        CompoundTag tag = mob.getPersistentData();
-        if (!tag.contains("MobArmoryLootTable")) return;
+        String lootTableId = mob.getEntityData().getString("MobArmoryLootTable");
         
-        ResourceLocation table = new ResourceLocation(tag.getString("MobArmoryLootTable"));
-        LootTable loot = event.getEntity().level().getServer().getLootData().getLootTable(table);
+        ResourceLocation tableId = new ResourceLocation(lootTableId);
         
-        LootParams params = new LootParams.Builder((ServerLevel) event.getEntity().level())
-                .withParameter(LootContextParams.THIS_ENTITY, mob)
-                .withParameter(LootContextParams.ORIGIN, mob.position())
-                .withParameter(LootContextParams.DAMAGE_SOURCE, event.getSource())
-                .create(LootContextParamSets.ENTITY);
+        WorldServer world = (WorldServer) mob.world;
         
-        for (ItemStack stack : loot.getRandomItems(params)) {
-            event.getDrops().add(
-                    new ItemEntity(
-                            mob.level(),
-                            mob.getX(),
-                            mob.getY(),
-                            mob.getZ(),
-                            stack
-                    )
-            );
+        LootTable loot = world.getLootTableManager().getLootTableFromLocation(tableId);
+        
+        LootContext context = new LootContext(0.0F, world, world.getLootTableManager(), mob, null, event.getSource());
+        
+        for (ItemStack stack : loot.generateLootForPools(world.rand, context)) {
+            event.getDrops().add(new EntityItem(world, mob.posX, mob.posY, mob.posZ, stack));
         }
     }
     
@@ -175,26 +178,38 @@ public class EquipmentHandler {
         return value != null && value >= 0.0F;
     }
     
-    private static MobEquipmentReloadListener.DifficultyLevel currentDifficulty(Level level) {
-        if (level.getLevelData().isHardcore()) return MobEquipmentReloadListener.DifficultyLevel.HARDCORE;
+    private static MobEquipmentReloadListener.DifficultyLevel currentDifficulty(
+            World world) {
         
-        return switch (level.getDifficulty()) {
-            case EASY, PEACEFUL -> MobEquipmentReloadListener.DifficultyLevel.EASY;
-            case NORMAL -> MobEquipmentReloadListener.DifficultyLevel.NORMAL;
-            case HARD -> MobEquipmentReloadListener.DifficultyLevel.HARD;
-        };
+        if (world.getWorldInfo().isHardcoreModeEnabled()) return MobEquipmentReloadListener.DifficultyLevel.HARDCORE;
+        
+        switch (world.getDifficulty()) {
+            case EASY:
+            case PEACEFUL: return MobEquipmentReloadListener.DifficultyLevel.EASY;
+            case NORMAL: return MobEquipmentReloadListener.DifficultyLevel.NORMAL;
+            case HARD: return MobEquipmentReloadListener.DifficultyLevel.HARD;
+            default: return MobEquipmentReloadListener.DifficultyLevel.NORMAL;
+        }
     }
     
-    private static MobEquipmentReloadListener.EquipmentSet pickWeightedSet(List<MobEquipmentReloadListener.EquipmentSet> sets, RandomSource random) {
-        int totalWeight = sets.stream().mapToInt(s -> s.weight).sum();
+    private static MobEquipmentReloadListener.EquipmentSet pickWeightedSet(List<MobEquipmentReloadListener.EquipmentSet> sets, Random random) {
+        int totalWeight = 0;
+        
+        for (MobEquipmentReloadListener.EquipmentSet set : sets) {
+            totalWeight += set.weight;
+        }
+        
         if (totalWeight <= 0) return null;
         
         int roll = random.nextInt(totalWeight);
         int cumulative = 0;
-        for (var set : sets) {
+        
+        for (MobEquipmentReloadListener.EquipmentSet set : sets) {
             cumulative += set.weight;
+            
             if (roll < cumulative) return set;
         }
+        
         return sets.get(sets.size() - 1);
     }
 }

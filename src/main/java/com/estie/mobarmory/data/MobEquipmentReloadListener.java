@@ -159,7 +159,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     //an edited entry, or when the server hands one to the client to open in the editor.
     public static MobEquipmentEntry fromJson(String fileName, JsonObject json) {
         ResourceLocation mob = json.has("mob") ? new ResourceLocation(json.get("mob").getAsString()) : null;
-        float chance = GsonHelper.getAsFloat(json, "chance", 1.0F);
+        float chance = GsonHelper.getAsFloat(json, "chance", -1.0F);
         ResourceLocation logKey = new ResourceLocation(MobArmory.MODID, "editor-transfer");
         
         List<DifficultyGroup> groups = new ArrayList<>();

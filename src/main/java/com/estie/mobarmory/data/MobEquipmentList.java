@@ -1,11 +1,12 @@
 package com.estie.mobarmory.data;
 
-import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraft.launchwrapper.Launch;
 
+//examples of building equipment sets in code
 public class MobEquipmentList {
     
     public static void init() {
-        if (FMLLoader.isProduction()) return;
+        if (!(Boolean) Launch.blackboard.get("fml.deobfuscatedEnvironment")) return;
         
         MobEquipmentBuilder.mob("minecraft:blaze")
                 .chance(0.9f)

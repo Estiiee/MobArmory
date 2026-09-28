@@ -4,6 +4,7 @@ import com.estie.mobarmory.command.MobArmoryCommands;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import com.estie.mobarmory.handlers.PacketHandler;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import org.apache.logging.log4j.LogManager;
@@ -23,6 +24,11 @@ public class MobArmory {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         PacketHandler.register();
+    }
+    
+    @Mod.EventHandler
+    public void postInit(FMLPostInitializationEvent event) {
+        //MobEquipmentList.init();
     }
     
     @Mod.EventHandler

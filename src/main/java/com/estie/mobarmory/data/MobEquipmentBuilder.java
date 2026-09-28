@@ -5,9 +5,9 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.estie.mobarmory.Config;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraft.util.ResourceLocation;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -38,22 +38,28 @@ public class MobEquipmentBuilder {
     }
     
     public SaveResult createFile(String fileName) {
-        Path dir = FMLPaths.GAMEDIR.get().resolve(Config.outputDirectory).normalize();
+        Path dir = Config.getOutputDirectory().toPath();
         Path file = dir.resolve(fileName + ".json").normalize();
         
         try {
+            if (!file.startsWith(dir.normalize())) {
+                return new SaveResult(false, file, new IllegalArgumentException("Invalid file name"));
+            }
+            
             JsonObject json = buildJson();
             
             Files.createDirectories(dir);
             
-            if (!file.startsWith(dir)) {
-                return new SaveResult(false, file, new IllegalArgumentException("Invalid file name"));
-            }
-            
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            
             String jsonString = gson.toJson(json);
             
-            Files.writeString(file, jsonString, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(
+                    file,
+                    jsonString.getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+            );
             
             return new SaveResult(true, file, null);
             
@@ -150,7 +156,11 @@ public class MobEquipmentBuilder {
             JsonObject obj = new JsonObject();
             
             JsonArray matchArr = new JsonArray();
-            for (String m : matchers) matchArr.add(m);
+            
+            for (String m : matchers) {
+                matchArr.add(m);
+            }
+            
             obj.add("match", matchArr);
             
             if (chance != null) obj.addProperty("chance", chance);
@@ -219,7 +229,11 @@ public class MobEquipmentBuilder {
             JsonObject obj = new JsonObject();
             
             JsonArray matchArr = new JsonArray();
-            for (String m : matchers) matchArr.add(m);
+            
+            for (String m : matchers) {
+                matchArr.add(m);
+            }
+            
             obj.add("match", matchArr);
             
             if (chance != null) obj.addProperty("chance", chance);
@@ -244,6 +258,7 @@ public class MobEquipmentBuilder {
         private int weight = 1;
         private String mobNbt = null;
         private String lootTable = null;
+        
         private final List<PotionEffectBuilder> potionEffects = new ArrayList<>();
         private long timeOfDayMin = -1, timeOfDayMax = -1; // -1 = unset
         private String yComparator = null;
@@ -307,11 +322,14 @@ public class MobEquipmentBuilder {
         public JsonObject toJson() {
             JsonObject obj = new JsonObject();
             
-            if (name != null) obj.addProperty("name", name);
+            if (name != null) {
+                obj.addProperty("name", name);
+            }
+            
             obj.addProperty("weight", weight);
             
-            // Serialize slots
-            for (var entry : slots.entrySet()) {
+            //serialize slots
+            for (Map.Entry<String, List<WeightedItemBuilder>> entry : slots.entrySet()) {
                 String slotName = entry.getKey();
                 List<WeightedItemBuilder> items = entry.getValue();
                 
@@ -328,7 +346,9 @@ public class MobEquipmentBuilder {
             
             if (!potionEffects.isEmpty()) {
                 JsonArray arr = new JsonArray();
-                for (PotionEffectBuilder pe : potionEffects) arr.add(pe.toJson());
+                for (PotionEffectBuilder pe : potionEffects) {
+                    arr.add(pe.toJson());
+                }
                 obj.add("potion_effects", arr);
             }
             
@@ -513,5 +533,4 @@ public class MobEquipmentBuilder {
             this.error = error;
         }
     }
-    
 }

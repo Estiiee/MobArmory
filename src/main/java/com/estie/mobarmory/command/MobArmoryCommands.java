@@ -51,7 +51,7 @@ public class MobArmoryCommands extends CommandBase {
                 new MobEquipmentReloadListener.MobEquipmentEntry(
                         null,
                         null,
-                        1.0f,
+                        -1.0f,
                         new ArrayList<>()
                 );
         

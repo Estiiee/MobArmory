@@ -16,7 +16,7 @@ import java.util.*;
 public class MobEquipmentBuilder {
     
     private ResourceLocation mob;
-    private float chance = 1.0f;
+    private float chance = -1.0f;
     
     private final List<DifficultyGroupBuilder> difficultyGroups = new ArrayList<>();
     
@@ -189,7 +189,10 @@ public class MobEquipmentBuilder {
             this.parent = parent;
         }
         
-        //biome matchers
+        //biome matchers:
+        //"minecraft:plains" -> biome ID
+        //"COLD" -> biome dictionary/tag name (auto capitalized)
+        //"global" -> matches every biome
         public BiomeGroupBuilder match(String raw) {
             matchers.add(raw);
             return this;
@@ -231,6 +234,9 @@ public class MobEquipmentBuilder {
             JsonArray matchArr = new JsonArray();
             
             for (String m : matchers) {
+                if (!m.equalsIgnoreCase("global") && m.indexOf(':') < 0) {
+                    m = m.toUpperCase(Locale.ROOT);
+                }
                 matchArr.add(m);
             }
             

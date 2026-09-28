@@ -1,58 +1,112 @@
 package com.estie.mobarmory.data;
 
 import com.estie.mobarmory.Config;
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.estie.mobarmory.MobArmory;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
-import net.minecraft.util.GsonHelper;
-import net.minecraft.util.profiling.ProfilerFiller;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.item.Item;
-import net.minecraftforge.registries.ForgeRegistries;
+import com.google.gson.JsonParser;
+import net.minecraft.inventory.EntityEquipmentSlot;
+import net.minecraft.item.Item;
+import net.minecraft.util.JsonUtils;
+import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener {
-    private static final Gson GSON = new Gson();
-    private static final String DIRECTORY = "mob_equipment";
-    public static Map<ResourceLocation, MobEquipmentEntry> ENTRIES = Map.of();
+public class MobEquipmentReloadListener {
+    public static Map<ResourceLocation, MobEquipmentEntry> ENTRIES = Collections.emptyMap();
     
     //command-only, unmerged view: one MobEquipmentEntry per source file (fileName set), instead of
     //one merged entry per mob (fileName null, as in ENTRIES). lets /mobarmory listmobsets show
     //every "zombie_snowy", "zombie_hardcore" etc. separately for inspection/editing.
     public static List<MobEquipmentEntry> LOOKUP_FILES = new ArrayList<>();
     
-    private static final Map<String, EquipmentSlot> SLOT_KEYS = Map.of(
-            "head", EquipmentSlot.HEAD,
-            "chest", EquipmentSlot.CHEST,
-            "legs", EquipmentSlot.LEGS,
-            "feet", EquipmentSlot.FEET,
-            "mainhand", EquipmentSlot.MAINHAND,
-            "offhand", EquipmentSlot.OFFHAND
-    );
-    
-    public MobEquipmentReloadListener() {
-        super(GSON, DIRECTORY);
+    private static final Map<String, EntityEquipmentSlot> SLOT_KEYS = new LinkedHashMap<>();
+    static {
+        SLOT_KEYS.put("head", EntityEquipmentSlot.HEAD);
+        SLOT_KEYS.put("chest", EntityEquipmentSlot.CHEST);
+        SLOT_KEYS.put("legs", EntityEquipmentSlot.LEGS);
+        SLOT_KEYS.put("feet", EntityEquipmentSlot.FEET);
+        SLOT_KEYS.put("mainhand", EntityEquipmentSlot.MAINHAND);
+        SLOT_KEYS.put("offhand", EntityEquipmentSlot.OFFHAND);
     }
     
-    @Override
-    protected void apply(Map<ResourceLocation, JsonElement> resources, ResourceManager manager, ProfilerFiller profiler) {
+    //1.12.2 has no datapacks, so files are read straight from Config.getReadDirectory() instead of
+    //data/<namespace>/mob_equipment. subfolders are walked like the datapack loader did, and a file's id
+    //is its relative path without ".json" (e.g. "zombie_snowy" or "undead/zombie_snowy")
+    public static void reload() {
+        File dir = Config.getReadDirectory();
+        
+        if (!dir.exists()) {
+            dir.mkdirs();
+            copyExampleFile(dir);
+        }
+        
+        Path root = dir.toPath();
+        List<Path> paths;
+        try (Stream<Path> walk = Files.walk(root)) {
+            paths = walk.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".json"))
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            MobArmory.LOGGER.error("Failed to scan mob_equipment directory {}", root, e);
+            return;
+        }
+        
+        Map<ResourceLocation, JsonElement> resources = new HashMap<>();
+        
+        for (Path path : paths) {
+            String relative = root.relativize(path).toString().replace('\\', '/');
+            relative = relative.substring(0, relative.length() - ".json".length());
+            
+            try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                JsonElement element = new JsonParser().parse(reader);
+                if (!element.isJsonObject()) {
+                    MobArmory.LOGGER.warn("Skipping mob_equipment file {} - not a JSON object", path);
+                    continue;
+                }
+                resources.put(new ResourceLocation(MobArmory.MODID, relative), element);
+            } catch (Exception e) {
+                MobArmory.LOGGER.error("Failed to read mob_equipment file {}", path, e);
+            }
+        }
+        
+        apply(resources);
+    }
+    
+    //only runs when the read directory didn't exist yet, so deleting the example afterwards sticks.
+    //expects the file at src/main/resources/assets/mobarmory/mob_equipment/zombie_example.json
+    private static void copyExampleFile(File dir) {
+        String resource = "/assets/" + MobArmory.MODID + "/mob_equipment/zombie_example.json";
+        try (InputStream in = MobEquipmentReloadListener.class.getResourceAsStream(resource)) {
+            if (in == null) return;
+            Files.copy(in, new File(dir, "zombie_example.json").toPath());
+        } catch (IOException e) {
+            MobArmory.LOGGER.warn("Could not copy example mob_equipment file", e);
+        }
+    }
+    
+    private static void apply(Map<ResourceLocation, JsonElement> resources) {
         
         //group JSONs by mob ID. no override branch here - any two files targeting the same mob merge
         Map<ResourceLocation, List<JsonFile>> grouped = new HashMap<>();
         
-        for (var entry : resources.entrySet()) {
+        for (Map.Entry<ResourceLocation, JsonElement> entry : resources.entrySet()) {
             ResourceLocation fileId = entry.getKey();
             JsonObject json = entry.getValue().getAsJsonObject();
             
             ResourceLocation mobId;
             try {
-                mobId = new ResourceLocation(GsonHelper.getAsString(json, "mob"));
+                mobId = new ResourceLocation(JsonUtils.getString(json, "mob"));
             } catch (Exception e) {
                 MobArmory.LOGGER.debug("Skipping mob_equipment file {} - no valid 'mob' field", fileId);
                 continue;
@@ -65,7 +119,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         Map<ResourceLocation, MobEquipmentEntry> parsed = new HashMap<>();
         List<MobEquipmentEntry> lookupFiles = new ArrayList<>();
         
-        for (var mobEntry : grouped.entrySet()) {
+        for (Map.Entry<ResourceLocation, List<JsonFile>> mobEntry : grouped.entrySet()) {
             ResourceLocation mobId = mobEntry.getKey();
             List<JsonFile> files = mobEntry.getValue();
             
@@ -73,7 +127,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             //matching within a merged difficulty group is order-dependent (first match-or-global wins)
             files.sort(Comparator.comparing(f -> f.fileId().toString()));
             
-            float mobChance = 1.0F;
+            float mobChance = -1.0F;
             Map<List<DifficultyLevel>, DifficultyGroup> merged = new LinkedHashMap<>();
             
             for (JsonFile file : files) {
@@ -81,8 +135,8 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                     JsonObject json = file.json();
                     
                     //each file's own declared chance, independent of the merged mob-level value below
-                    float fileChance = GsonHelper.getAsFloat(json, "chance", 1.0F);
-                    mobChance = GsonHelper.getAsFloat(json, "chance", mobChance);
+                    float fileChance = JsonUtils.getFloat(json, "chance", -1.0F);
+                    if (mobChance < 0.0F && fileChance >= 0.0F) mobChance = fileChance;
                     
                     List<DifficultyGroup> groups;
                     
@@ -94,9 +148,9 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                         }
                     } else {
                         GroupBody body = parseGroupBody(json, file.fileId());
-                        groups = List.of(
+                        groups = Collections.singletonList(
                                 new DifficultyGroup(
-                                        List.of(DifficultyLevel.GLOBAL),
+                                        Collections.singletonList(DifficultyLevel.GLOBAL),
                                         null,
                                         body.biomeGroups(),
                                         body.globalSets()
@@ -114,14 +168,15 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                         
                         //key = matchers as a set, so ["hard","hardcore"] and ["hardcore","hard"]
                         //merge into the same group instead of staying separate
-                        List<DifficultyLevel> key = g.matchers.stream().sorted().toList();
+                        List<DifficultyLevel> key = g.matchers.stream().sorted().collect(Collectors.toList());
                         
                         DifficultyGroup existing = merged.get(key);
                         
                         if (existing == null) {
                             merged.put(key, g);
                         } else {
-                            Float mergedChance = g.chance != null ? g.chance : existing.chance;
+                            //similar to top level chance, the first to define the chance for given difficulty group wins
+                            Float mergedChance = existing.chance != null ? existing.chance : g.chance;
                             
                             List<BiomeGroup> mergedBiomes = new ArrayList<>(existing.biomeGroups);
                             mergedBiomes.addAll(g.biomeGroups);
@@ -137,23 +192,39 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                 }
             }
             
+            //the top level chance is determined by the first in order file defining a non-negative value
+            //-1 is used for skipping files from defining a top level chance. if no file defines any chance for a given mob,
+            //0 is used (mob disabled). however, even with it set to 0 mobs can still spawn with sets if their respective
+            //biome/difficulty groups define their own non-zero chances
+            if (mobChance < 0.0F) mobChance = 0.0F;
             parsed.put(mobId, new MobEquipmentEntry(null, mobId, mobChance, new ArrayList<>(merged.values())));
         }
         
-        ENTRIES = Map.copyOf(parsed);
-        LOOKUP_FILES = List.copyOf(lookupFiles);
+        ENTRIES = Collections.unmodifiableMap(parsed);
+        LOOKUP_FILES = Collections.unmodifiableList(lookupFiles);
         
         MobArmory.LOGGER.info("Loaded {} mob equipment entries", ENTRIES.size());
     }
     
-    private record JsonFile(ResourceLocation fileId, JsonObject json) {}
+    private static class JsonFile {
+        private final ResourceLocation fileId;
+        private final JsonObject json;
+        
+        JsonFile(ResourceLocation fileId, JsonObject json) {
+            this.fileId = fileId;
+            this.json = json;
+        }
+        
+        ResourceLocation fileId() { return fileId; }
+        JsonObject json() { return json; }
+    }
     
     //editor round-trip entry point: builds a single MobEquipmentEntry straight from one JSON blob
     //(same schema as the datapack files), no multi-file merging - used when the client hands back
     //an edited entry, or when the server hands one to the client to open in the editor.
     public static MobEquipmentEntry fromJson(String fileName, JsonObject json) {
         ResourceLocation mob = json.has("mob") ? new ResourceLocation(json.get("mob").getAsString()) : null;
-        float chance = GsonHelper.getAsFloat(json, "chance", 1.0F);
+        float chance = JsonUtils.getFloat(json, "chance", -1.0F);
         ResourceLocation logKey = new ResourceLocation(MobArmory.MODID, "editor-transfer");
         
         List<DifficultyGroup> groups = new ArrayList<>();
@@ -222,15 +293,15 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     
     public static String biomeMatchToString(BiomeMatch match) {
         if (match instanceof BiomeMatch.Global) return "global";
-        if (match instanceof BiomeMatch.Tag t) return "#" + t.tag();
-        if (match instanceof BiomeMatch.Id i) return i.id().toString();
+        if (match instanceof BiomeMatch.Tag) return ((BiomeMatch.Tag) match).tag();
+        if (match instanceof BiomeMatch.Id) return ((BiomeMatch.Id) match).id().toString();
         throw new IllegalStateException("Unknown BiomeMatch: " + match);
     }
-  
+    
     public static BiomeMatch parseBiomeMatch(String raw) {
-        if (raw.equals("global")) return new BiomeMatch.Global();
-        else if (raw.startsWith("#")) return new BiomeMatch.Tag(new ResourceLocation(raw.substring(1)));
-        else return new BiomeMatch.Id(new ResourceLocation(raw));
+        if (raw.equalsIgnoreCase("global")) return new BiomeMatch.Global();
+        else if (raw.indexOf(':') >= 0) return new BiomeMatch.Id(new ResourceLocation(raw));
+        else return new BiomeMatch.Tag(raw);
     }
     
     private static JsonObject toJson(EquipmentSet set) {
@@ -238,12 +309,12 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         if (set.name != null) obj.addProperty("name", set.name);
         obj.addProperty("weight", set.weight);
         
-        for (var slotEntry : set.slots.entrySet()) {
+        for (Map.Entry<EntityEquipmentSlot, List<WeightedItem>> slotEntry : set.slots.entrySet()) {
             String slotKey = SLOT_KEYS.entrySet().stream()
                     .filter(e -> e.getValue() == slotEntry.getKey())
                     .map(Map.Entry::getKey)
                     .findFirst()
-                    .orElseThrow();
+                    .orElseThrow(() -> new IllegalStateException("No key for slot " + slotEntry.getKey()));
             
             JsonArray arr = new JsonArray();
             for (WeightedItem item : slotEntry.getValue()) arr.add(toJson(item));
@@ -296,10 +367,12 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     private static JsonObject toJson(EnchantData enchant) {
         JsonObject obj = new JsonObject();
         
-        if (enchant instanceof EnchantData.Random r) {
+        if (enchant instanceof EnchantData.Random) {
+            EnchantData.Random r = (EnchantData.Random) enchant;
             obj.addProperty("type", "random");
             obj.addProperty("power", r.power());
-        } else if (enchant instanceof EnchantData.Predefined p) {
+        } else if (enchant instanceof EnchantData.Predefined) {
+            EnchantData.Predefined p = (EnchantData.Predefined) enchant;
             obj.addProperty("type", "predefined");
             
             JsonArray arr = new JsonArray();
@@ -363,10 +436,10 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         for (JsonElement mEl : matchArr) {
             String raw = mEl.getAsString();
             
-            //add tags for #, regular biome id otherwise
-            if (raw.equals("global")) matchers.add(new BiomeMatch.Global());
-            else if (raw.startsWith("#")) matchers.add(new BiomeMatch.Tag(new ResourceLocation(raw.substring(1))));
-            else matchers.add(new BiomeMatch.Id(new ResourceLocation(raw)));
+            //strings with colon (minecraft:plains) go to single biomes, without are treated as "tags"
+            if (raw.equalsIgnoreCase("global")) matchers.add(new BiomeMatch.Global());
+             else if (raw.indexOf(':') >= 0) matchers.add(new BiomeMatch.Id(new ResourceLocation(raw)));
+             else matchers.add(new BiomeMatch.Tag(raw));
         }
         
         //optional per-biome-group chance, overrides the difficulty group's/mob's chance
@@ -389,43 +462,43 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     
     private static EquipmentSet parseSet(JsonObject json, ResourceLocation sourceKey) {
         String name = json.has("name") ? json.get("name").getAsString() : null;
-        int weight = GsonHelper.getAsInt(json, "weight", 1);
-        Map<EquipmentSlot, List<WeightedItem>> slots = new EnumMap<>(EquipmentSlot.class);
+        int weight = JsonUtils.getInt(json, "weight", 1);
+        Map<EntityEquipmentSlot, List<WeightedItem>> slots = new EnumMap<>(EntityEquipmentSlot.class);
         
-        for (var slotKey : SLOT_KEYS.entrySet()) {
+        for (Map.Entry<String, EntityEquipmentSlot> slotKey : SLOT_KEYS.entrySet()) {
             if (!json.has(slotKey.getKey())) continue;
             
-            JsonArray arr = GsonHelper.getAsJsonArray(json, slotKey.getKey());
+            JsonArray arr = JsonUtils.getJsonArray(json, slotKey.getKey());
             List<WeightedItem> items = new ArrayList<>();
             
             for (JsonElement el : arr) {
                 JsonObject obj = el.getAsJsonObject();
-                int itemWeight = GsonHelper.getAsInt(obj, "weight", 1);
+                int itemWeight = JsonUtils.getInt(obj, "weight", 1);
                 String itemNbt = obj.has("nbt") ? obj.get("nbt").getAsString() : null;
                 
                 EnchantData enchant = null;
                 
                 if (obj.has("enchant")) {
                     JsonObject ench = obj.getAsJsonObject("enchant");
-                    String type = GsonHelper.getAsString(ench, "type");
+                    String type = JsonUtils.getString(ench, "type");
                     
                     if (type.equals("random")) {
-                        enchant = new EnchantData.Random(GsonHelper.getAsInt(ench, "power", 30));
+                        enchant = new EnchantData.Random(JsonUtils.getInt(ench, "power", 30));
                     } else if (type.equals("predefined")) {
                         List<String> ids = new ArrayList<>();
                         List<Integer> levels = new ArrayList<>();
                         
                         for (JsonElement enchEl : ench.getAsJsonArray("list")) {
                             JsonObject enchObj = enchEl.getAsJsonObject();
-                            ids.add(GsonHelper.getAsString(enchObj, "id"));
-                            levels.add(GsonHelper.getAsInt(enchObj, "level"));
+                            ids.add(JsonUtils.getString(enchObj, "id"));
+                            levels.add(JsonUtils.getInt(enchObj, "level"));
                         }
                         
                         enchant = new EnchantData.Predefined(ids, levels);
                     }
                 }
                 
-                items.add(new WeightedItem(GsonHelper.getAsString(obj, "item"), itemWeight, enchant, itemNbt));
+                items.add(new WeightedItem(JsonUtils.getString(obj, "item"), itemWeight, enchant, itemNbt));
             }
             
             if (!items.isEmpty()) slots.put(slotKey.getValue(), items);
@@ -440,9 +513,9 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             for (JsonElement el : json.getAsJsonArray("potion_effects")) {
                 JsonObject o = el.getAsJsonObject();
                 set.potionEffects.add(new PotionEffectEntry(
-                        GsonHelper.getAsString(o, "effect"),
-                        GsonHelper.getAsInt(o, "duration", 600),
-                        GsonHelper.getAsInt(o, "amplifier", 0)
+                        JsonUtils.getString(o, "effect"),
+                        JsonUtils.getInt(o, "duration", 600),
+                        JsonUtils.getInt(o, "amplifier", 0)
                 ));
             }
         }
@@ -459,8 +532,8 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         int yValue = 350;
         if (json.has("y_level")) {
             JsonObject y = json.getAsJsonObject("y_level");
-            comparator = YComparator.fromSymbol(GsonHelper.getAsString(y, "comparator", "<"));
-            yValue = GsonHelper.getAsInt(y, "value", 350);
+            comparator = YComparator.fromSymbol(JsonUtils.getString(y, "comparator", "<"));
+            yValue = JsonUtils.getInt(y, "value", 350);
         }
         set.yLevel = new YLevelCondition(comparator, yValue);
         
@@ -544,10 +617,31 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         }
     }
     
-    public sealed interface BiomeMatch {
-        record Tag(ResourceLocation tag) implements BiomeMatch {}
-        record Id(ResourceLocation id) implements BiomeMatch {}
-        record Global() implements BiomeMatch {}
+    public interface BiomeMatch {
+        final class Tag implements BiomeMatch {
+            private final String tag;
+            
+            public Tag(String  tag) { this.tag = tag; }
+            public String tag() { return tag; }
+            
+            @Override public boolean equals(Object o) { return o instanceof Tag && tag.equals(((Tag) o).tag); }
+            @Override public int hashCode() { return tag.hashCode(); }
+        }
+        
+        final class Id implements BiomeMatch {
+            private final ResourceLocation id;
+            
+            public Id(ResourceLocation id) { this.id = id; }
+            public ResourceLocation id() { return id; }
+            
+            @Override public boolean equals(Object o) { return o instanceof Id && id.equals(((Id) o).id); }
+            @Override public int hashCode() { return id.hashCode(); }
+        }
+        
+        final class Global implements BiomeMatch {
+            @Override public boolean equals(Object o) { return o instanceof Global; }
+            @Override public int hashCode() { return 1; }
+        }
     }
     
     public static class WeightedItem {
@@ -574,16 +668,33 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         }
     }
     
-    public sealed interface EnchantData {
-        record Random(int power) implements EnchantData {}
-        record Predefined(List<String> ids, List<Integer> levels) implements EnchantData {}
+    public interface EnchantData {
+        final class Random implements EnchantData {
+            private final int power;
+            
+            public Random(int power) { this.power = power; }
+            public int power() { return power; }
+        }
+        
+        final class Predefined implements EnchantData {
+            private final List<String> ids;
+            private final List<Integer> levels;
+            
+            public Predefined(List<String> ids, List<Integer> levels) {
+                this.ids = ids;
+                this.levels = levels;
+            }
+            
+            public List<String> ids() { return ids; }
+            public List<Integer> levels() { return levels; }
+        }
     }
     
     public static class EquipmentSet {
         public String name;
         public int weight;
         public String lootTable;
-        public Map<EquipmentSlot, List<WeightedItem>> slots;
+        public Map<EntityEquipmentSlot, List<WeightedItem>> slots;
         
         public String mobNbt;
         public List<PotionEffectEntry> potionEffects = new ArrayList<>();
@@ -591,7 +702,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         public TimeRange timeOfDay = new TimeRange(0, 24000);
         public YLevelCondition yLevel = new YLevelCondition(YComparator.LT, 350);
         
-        public EquipmentSet(String name, int weight, Map<EquipmentSlot, List<WeightedItem>> slots) {
+        public EquipmentSet(String name, int weight, Map<EntityEquipmentSlot, List<WeightedItem>> slots) {
             this.name = name;
             this.weight = weight;
             this.slots = slots;
@@ -649,13 +760,14 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         }
         
         public boolean matches(int y) {
-            return switch (comparator) {
-                case LT -> y < value;
-                case LTE -> y <= value;
-                case EQ -> y == value;
-                case GTE -> y >= value;
-                case GT -> y > value;
-            };
+            switch (comparator) {
+                case LT: return y < value;
+                case LTE: return y <= value;
+                case EQ: return y == value;
+                case GTE: return y >= value;
+                case GT: return y > value;
+                default: return false;
+            }
         }
     }
     
@@ -711,5 +823,16 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         return t.minTicks == 0 && t.maxTicks == 24000;
     }
     
-    private record GroupBody(List<BiomeGroup> biomeGroups, List<EquipmentSet> globalSets) {}
+    private static class GroupBody {
+        private final List<BiomeGroup> biomeGroups;
+        private final List<EquipmentSet> globalSets;
+        
+        GroupBody(List<BiomeGroup> biomeGroups, List<EquipmentSet> globalSets) {
+            this.biomeGroups = biomeGroups;
+            this.globalSets = globalSets;
+        }
+        
+        List<BiomeGroup> biomeGroups() { return biomeGroups; }
+        List<EquipmentSet> globalSets() { return globalSets; }
+    }
 }

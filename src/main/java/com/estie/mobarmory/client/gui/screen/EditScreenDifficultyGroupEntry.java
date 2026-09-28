@@ -74,6 +74,23 @@ public class EditScreenDifficultyGroupEntry extends Screen {
                 Component.literal("Back"),
                 btn -> this.minecraft.setScreen(new EditScreenDifficultyGroups(main))
         ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
+        
+        this.addRenderableWidget(Button.builder(
+                Component.literal("Save"),
+                btn -> {
+                    String initial = main.entry.fileName != null ? main.entry.fileName : "";
+                    this.minecraft.setScreen(new TextInputScreen(
+                            this,
+                            "Save As...",
+                            initial,
+                            name -> {
+                                main.entry.fileName = name;
+                                main.saveToFile();
+                                this.minecraft.setScreen(null);
+                            }
+                    ));
+                }
+        ).bounds(this.width / 2 - 50, this.height - 40, 100, 20).build());
     }
     
     @Override

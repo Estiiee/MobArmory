@@ -102,14 +102,14 @@ public class EditScreenEquipmentSetEntry extends Screen {
         addLeft.accept(Button.builder(
                 Component.literal("Mob NBT"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
-                        this,
-                        "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')",
+                        this, "Mob NBT (e.g. CustomName: '{\"text\":\"Boss\"}')",
                         set.mobNbt != null ? set.mobNbt : "",
                         value -> {
                             set.mobNbt = value.isBlank() ? null : value;
                             this.minecraft.setScreen(new EditScreenEquipmentSetEntry(main, difficultyGroup, biomeGroup, set));
                         },
-                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true
+                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true,
+                        true
                 ))
         ));
         

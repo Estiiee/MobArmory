@@ -48,7 +48,7 @@ public class EditScreenBiomeGroupEntry extends Screen {
                         value -> {
                             try {
                                 float f = Float.parseFloat(value);
-                                biomeGroup.chance = Mth.clamp(f, 0f, 1f);
+                                biomeGroup.chance = Mth.clamp(f, -1f, 1f);
                             } catch (Exception ignored) {}
                         }
                 ))

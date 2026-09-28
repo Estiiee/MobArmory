@@ -84,7 +84,7 @@ public class MobEquipmentBuilder {
         private final MobEquipmentBuilder parent;
         
         private final List<String> matchers = new ArrayList<>();
-        private Float chance = null;
+        private Float chance = -1.0F;
         private final List<BiomeGroupBuilder> biomeGroups = new ArrayList<>();
         
         public DifficultyGroupBuilder(MobEquipmentBuilder parent) {
@@ -172,7 +172,7 @@ public class MobEquipmentBuilder {
         private final DifficultyGroupBuilder parent;
         
         private final List<String> matchers = new ArrayList<>();
-        private Float chance = null;
+        private Float chance = -1.0F;
         private final List<EquipmentSetBuilder> sets = new ArrayList<>();
         
         public BiomeGroupBuilder(DifficultyGroupBuilder parent) {

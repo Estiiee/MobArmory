@@ -1,5 +1,6 @@
 package com.estie.mobarmory.data;
 
+import com.estie.mobarmory.Config;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -106,6 +107,8 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
                     //command-only, unmerged: this file's own contribution kept as-is, alongside the merge below.
                     //fileName is the file's stripped path id (e.g. "zombie_snowy") - what listmobsets displays
                     lookupFiles.add(new MobEquipmentEntry(file.fileId().getPath(), mobId, fileChance, groups));
+                    
+                    if (file.fileId().getPath().equals("zombie_example") && !Config.spawnExampleZombie) continue;
                     
                     for (DifficultyGroup g : groups) {
                         

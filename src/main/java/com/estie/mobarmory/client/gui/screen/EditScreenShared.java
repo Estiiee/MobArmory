@@ -88,7 +88,7 @@ public final class EditScreenShared {
     }
     
     public static boolean hasOverride(Float value) {
-        return value != null && value != 0.0F;
+        return value != null && value >= 0.0F;
     }
     
     public static void rebuildPreviewEntity(MobEquipmentReloadListener.MobEquipmentEntry entry, ClientLevel level) {
@@ -124,7 +124,7 @@ public final class EditScreenShared {
     
     public static boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (dragging) {
-            previewYaw -= (float) (mouseX - lastDragMouseX) * 2f; // flipped: was +=
+            previewYaw -= (float) (mouseX - lastDragMouseX) * 2f;
             previewPitch = Mth.clamp(previewPitch - (float) (mouseY - lastDragMouseY) * 2f, MIN_PITCH, MAX_PITCH);
             lastDragMouseX = mouseX;
             lastDragMouseY = mouseY;

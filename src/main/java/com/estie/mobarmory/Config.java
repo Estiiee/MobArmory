@@ -18,17 +18,22 @@ public final class Config {
     
     private static final ForgeConfigSpec.BooleanValue ENABLED;
     private static final ForgeConfigSpec.BooleanValue CLIENT_ACCESSIBLE;
+    private static final ForgeConfigSpec.BooleanValue SPAWN_EXAMPLE_ZOMBIE;
     
     static {
         BUILDER.push("General");
         
         ENABLED = BUILDER.comment("Use to enable or disable mob equipment altogether").define("enabled", true);
         
-        CLIENT_ACCESSIBLE = BUILDER.comment("Whether clients can access server's mob equipment entries without operator permissions",
+        CLIENT_ACCESSIBLE = BUILDER.comment("Whether clients can access server's mob equipment entries without operator permissions.",
                 "This option does not allow altering any server side data, all copies are created locally, but it allows viewing and modifying server's mob equipment data on the client")
                 .define("clientAccessible", true);
         
         OUTPUT_DIRECTORY = BUILDER.comment("Where generated files should be placed, starting from the root").define("outputDirectory", "mob_armory/output");
+        
+        SPAWN_EXAMPLE_ZOMBIE = BUILDER.comment("Should the game use the 'zombie_example' file for spawning mobs.",
+                "By default false as it's only meant to work as a demonstration")
+                .define("spawnExampleZombie", false);
         
         BUILDER.pop();
         SPEC = BUILDER.build();
@@ -42,6 +47,7 @@ public final class Config {
     
     public static boolean enabled;
     public static boolean clientAccessible;
+    public static boolean spawnExampleZombie;
     
     // =========================================================
     // Sync
@@ -54,6 +60,7 @@ public final class Config {
         enabled = ENABLED.get();
         clientAccessible = CLIENT_ACCESSIBLE.get();
         outputDirectory = OUTPUT_DIRECTORY.get();
+        spawnExampleZombie = SPAWN_EXAMPLE_ZOMBIE.get();
     }
     
     // =========================================================

@@ -44,7 +44,7 @@ public class EditScreenBiomeGroups extends Screen
                     MobEquipmentReloadListener.BiomeGroup newGroup =
                             new MobEquipmentReloadListener.BiomeGroup(
                                     new ArrayList<>(List.of(new MobEquipmentReloadListener.BiomeMatch.Global())),
-                                    0.0F,
+                                    -1.0F,
                                     new ArrayList<>()
                             );
                     

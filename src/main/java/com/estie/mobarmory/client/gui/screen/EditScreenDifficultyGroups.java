@@ -42,7 +42,7 @@ public class EditScreenDifficultyGroups extends Screen {
                     MobEquipmentReloadListener.DifficultyGroup newGroup =
                             new MobEquipmentReloadListener.DifficultyGroup(
                                     new ArrayList<>(List.of(MobEquipmentReloadListener.DifficultyLevel.GLOBAL)),
-                                    0.0F,
+                                    -1.0F,
                                     new ArrayList<>(),
                                     new ArrayList<>()
                             );

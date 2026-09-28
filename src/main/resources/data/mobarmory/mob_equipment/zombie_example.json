@@ -6,11 +6,13 @@
       "match": [
         "global"
       ],
+      "chance": -1.0,
       "biomes": [
         {
           "match": [
             "#forge:is_snowy"
           ],
+          "chance": -1.0,
           "sets": [
             {
               "weight": 1,
@@ -60,6 +62,7 @@
           "match": [
             "#forge:is_cave"
           ],
+          "chance": -1.0,
           "sets": [
             {
               "weight": 1,
@@ -91,6 +94,7 @@
           "match": [
             "#natures_spirit:is_tropical_woods"
           ],
+          "chance": -1.0,
           "sets": [
             {
               "weight": 1,
@@ -122,6 +126,7 @@
           "match": [
             "#forge:is_desert"
           ],
+          "chance": -1.0,
           "sets": [
             {
               "weight": 1,
@@ -180,6 +185,7 @@
           "match": [
             "global"
           ],
+          "chance": -1.0,
           "sets": [
             {
               "name": "Undersoldier",

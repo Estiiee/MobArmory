@@ -2,6 +2,7 @@ package com.estie.mobarmory.handlers;
 
 import com.estie.mobarmory.Config;
 import com.estie.mobarmory.MobArmory;
+import com.estie.mobarmory.MobEquipmentSpawnUtil;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.core.Holder;
 import net.minecraft.nbt.CompoundTag;
@@ -138,44 +139,7 @@ public class EquipmentHandler {
         MobEquipmentReloadListener.EquipmentSet chosenSet = pickWeightedSet(eligible, mob.getRandom());
         if (chosenSet == null) return;
         
-        for (var slotEntry : chosenSet.slots.entrySet()) {
-            MobEquipmentReloadListener.WeightedItem chosen = pickWeightedItem(slotEntry.getValue(), mob.getRandom());
-            
-            if (chosen != null) {
-                chosen.resolve();
-                
-                Item actual = chosen.item != null ? chosen.item : Items.AIR;
-                ItemStack stack = new ItemStack(actual);
-                
-                if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Random rnd) {
-                    EnchantmentHelper.enchantItem(mob.getRandom(), stack, rnd.power(), false);
-                }
-                
-                if (chosen.enchant instanceof MobEquipmentReloadListener.EnchantData.Predefined pre) {
-                    for (int i = 0; i < pre.ids().size(); i++) {
-                        ResourceLocation id = new ResourceLocation(pre.ids().get(i));
-                        Holder<Enchantment> holder = ForgeRegistries.ENCHANTMENTS.getHolder(id).orElse(null);
-                        if (holder != null) stack.enchant(holder.value(), pre.levels().get(i));
-                    }
-                }
-                
-                if (chosen.nbt != null) applyItemNbt(stack, chosen.nbt, chosen.itemId, mobId);
-                
-                mob.setItemSlot(slotEntry.getKey(), stack);
-            }
-        }
-        
-        if (chosenSet.mobNbt != null) applyMobNbt(mob, chosenSet.mobNbt, mobId);
-        if (chosenSet.lootTable != null) mob.getPersistentData().putString("MobArmoryLootTable", chosenSet.lootTable);
-        if (chosenSet.lootTable != null) System.out.println("Added a loot table: " + chosenSet.lootTable);
-        
-        for (MobEquipmentReloadListener.PotionEffectEntry pe : chosenSet.potionEffects) {
-            ResourceLocation rl = ResourceLocation.tryParse(pe.effectId);
-            MobEffect effect = rl != null ? ForgeRegistries.MOB_EFFECTS.getValue(rl) : null;
-            
-            if (effect != null) mob.addEffect(new MobEffectInstance(effect, pe.durationTicks, pe.amplifier));
-            else MobArmory.LOGGER.warn("Unknown potion effect {} while equipping {}", pe.effectId, mobId);
-        }
+        MobEquipmentSpawnUtil.applyEquipmentSet(mob, chosenSet);
     }
     
     @SubscribeEvent
@@ -207,34 +171,8 @@ public class EquipmentHandler {
         }
     }
     
-    //merges onto whatever the stack already has (e.g. enchants applied moments earlier) rather
-    //than replacing its NBT outright
-    private static void applyItemNbt(ItemStack stack, String rawNbt, String itemId, ResourceLocation mobId) {
-        try {
-            String wrapped = rawNbt.trim().startsWith("{") ? rawNbt.trim() : "{" + rawNbt.trim() + "}";
-            CompoundTag userTag = TagParser.parseTag(wrapped);
-            CompoundTag existing = stack.getTag();
-            stack.setTag(existing != null ? existing.merge(userTag) : userTag);
-        } catch (Exception e) {
-            MobArmory.LOGGER.warn("Failed to parse item NBT '{}' for {} on {}: {}", rawNbt, itemId, mobId, e.getMessage());
-        }
-    }
-    
-    //standard vanilla technique - the same save/merge/load /data merge entity itself uses
-    private static void applyMobNbt(Mob mob, String rawNbt, ResourceLocation mobId) {
-        try {
-            String wrapped = rawNbt.trim().startsWith("{") ? rawNbt.trim() : "{" + rawNbt.trim() + "}";
-            CompoundTag userTag = TagParser.parseTag(wrapped);
-            CompoundTag existing = mob.saveWithoutId(new CompoundTag());
-            existing.merge(userTag);
-            mob.load(existing);
-        } catch (Exception e) {
-            MobArmory.LOGGER.warn("Failed to parse mob NBT '{}' for {}: {}", rawNbt, mobId, e.getMessage());
-        }
-    }
-    
     private static boolean hasOverride(Float value) {
-        return value != null && value != 0.0F;
+        return value != null && value >= 0.0F;
     }
     
     private static MobEquipmentReloadListener.DifficultyLevel currentDifficulty(Level level) {
@@ -258,18 +196,5 @@ public class EquipmentHandler {
             if (roll < cumulative) return set;
         }
         return sets.get(sets.size() - 1);
-    }
-    
-    private static MobEquipmentReloadListener.WeightedItem pickWeightedItem(List<MobEquipmentReloadListener.WeightedItem> items, RandomSource random) {
-        int totalWeight = items.stream().mapToInt(s -> s.weight).sum();
-        if (totalWeight <= 0) return null;
-        
-        int roll = random.nextInt(totalWeight);
-        int cumulative = 0;
-        for (var item : items) {
-            cumulative += item.weight;
-            if (roll < cumulative) return item;
-        }
-        return items.get(items.size() - 1);
     }
 }

@@ -47,7 +47,7 @@ public class EditScreenDifficultyGroupEntry extends Screen {
                             value -> {
                                 try {
                                     float f = Float.parseFloat(value);
-                                    difficultyGroup.chance = Mth.clamp(f, 0f, 1f);
+                                    difficultyGroup.chance = Mth.clamp(f, -1f, 1f);
                                 } catch (Exception ignored) {}
                             }
                     ));

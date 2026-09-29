@@ -122,7 +122,10 @@ public class EditScreenMain extends Screen {
         updateBuilder();
         MobEquipmentBuilder.SaveResult result = builder.createFile(entry.fileName);
         
-        if (result.success) minecraft.player.displayClientMessage(Component.literal("Saved mob equipment to: " + result.path), false);
+        if (result.success) {
+            MobEquipmentReloadListener.addOrReplaceLookupFile(entry);
+            minecraft.player.displayClientMessage(Component.literal("Saved mob equipment to: " + result.path), false);
+        }
         else minecraft.player.displayClientMessage(Component.literal("Failed to save: " + result.error.getMessage()), false);
     }
     

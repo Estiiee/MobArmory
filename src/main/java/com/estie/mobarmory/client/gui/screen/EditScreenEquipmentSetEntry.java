@@ -83,6 +83,8 @@ public class EditScreenEquipmentSetEntry extends GuiScreen {
         this.buttonList.add(new GuiButton(
                 9, rightX, 40 + rightCount++ * 24, LEFT_PANEL_WIDTH, 20, "Back"
         ));
+        
+        this.buttonList.add(new GuiButton(10, this.width / 2 - 50, this.height - 40, 100, 20, "Save"));
     }
     
     @Override
@@ -221,6 +223,20 @@ public class EditScreenEquipmentSetEntry extends GuiScreen {
             case 9:
                 this.mc.displayGuiScreen(new EditScreenEquipmentSets(
                         main, difficultyGroup, biomeGroup
+                ));
+                break;
+            
+            case 10:
+                String initial = main.entry.fileName != null ? main.entry.fileName : "";
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Save As...",
+                        initial,
+                        name -> {
+                            main.entry.fileName = name;
+                            main.saveToFile();
+                            this.mc.displayGuiScreen(null);
+                        }
                 ));
                 break;
         }

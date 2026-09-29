@@ -120,12 +120,19 @@ public class EditScreenBiomeGroupEntry extends GuiScreen {
             dy += this.fontRenderer.FONT_HEIGHT;
         }
         
-        float effectiveChance = EditScreenShared.hasOverride(biomeGroup.chance) ? biomeGroup.chance
-                : EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance
-                : main.entry.chance;
+        float effectiveChance = EditScreenShared.hasOverride(biomeGroup.chance)
+                ? biomeGroup.chance : EditScreenShared.hasOverride(difficultyGroup.chance)
+                ? difficultyGroup.chance : main.entry.chance;
         
-        this.drawCenteredString(this.fontRenderer, "Chance: " + (int) (effectiveChance * 100) + "%",
-                previewX + PREVIEW_SIZE / 2, infoY + dy + 4, 0xAAAAAA);
+        String chanceVal = effectiveChance < 0.0F ? "Not Set" : (int) (effectiveChance * 100) + "%";
+        
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Chance: " + chanceVal,
+                previewX + PREVIEW_SIZE / 2,
+                infoY + dy + 4,
+                0xAAAAAA
+        );
         
         this.drawCenteredString(this.fontRenderer, "Equipment Sets: " + biomeGroup.sets.size(),
                 previewX + PREVIEW_SIZE / 2, infoY + dy + 18, 0xAAAAAA);

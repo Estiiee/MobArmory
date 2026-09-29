@@ -152,7 +152,7 @@ public final class EditScreenShared {
     public static boolean mouseDragged(double mouseX, double mouseY) {
         if (dragging) {
             previewYaw -= (float) (mouseX - lastDragMouseX) * 2f;
-            previewPitch = MathHelper.clamp(previewPitch - (float) (mouseY - lastDragMouseY) * 2f, MIN_PITCH, MAX_PITCH);
+            previewPitch = MathHelper.clamp(previewPitch + (float) (mouseY - lastDragMouseY) * 2f, MIN_PITCH, MAX_PITCH);
             lastDragMouseX = mouseX;
             lastDragMouseY = mouseY;
             return true;
@@ -166,12 +166,31 @@ public final class EditScreenShared {
         return was;
     }
     
-    public static boolean mouseScrolled(int mouseX, int mouseY, double delta) {
+    public static boolean mouseScrolled(int rawMouseX, int rawMouseY, double delta) {
+       Minecraft mc = Minecraft.getMinecraft();
+        if (delta == 0) {
+            return false;
+        }
+        ScaledResolution sr = new ScaledResolution(mc);
+
+        int mouseX = rawMouseX * sr.getScaledWidth() / mc.displayWidth;
+
+        int mouseY = sr.getScaledHeight()
+                - rawMouseY * sr.getScaledHeight() / mc.displayHeight
+                - 1;
+
         if (mouseX >= previewX && mouseX < previewX + previewSize
                 && mouseY >= previewY && mouseY < previewY + previewSize) {
-            previewZoom = MathHelper.clamp(previewZoom + (float) delta * 0.1f, MIN_ZOOM, MAX_ZOOM);
+
+            previewZoom = MathHelper.clamp(
+                    previewZoom + (float)Math.signum(delta) * 0.1F,
+                    MIN_ZOOM,
+                    MAX_ZOOM
+            );
+
             return true;
         }
+
         return false;
     }
     
@@ -244,17 +263,24 @@ public final class EditScreenShared {
     
     private static void applySetToPreview(MobEquipmentReloadListener.EquipmentSet set) {
         if (previewEntity == null) return;
-        for (EntityEquipmentSlot slot : EntityEquipmentSlot.values()) previewEntity.setItemStackToSlot(slot, ItemStack.EMPTY);
+        
+        for (EntityEquipmentSlot slot : EntityEquipmentSlot.values()) {
+            previewEntity.setItemStackToSlot(slot, ItemStack.EMPTY);
+        }
         if (set == null) return;
         
         for (Map.Entry<EntityEquipmentSlot, List<MobEquipmentReloadListener.WeightedItem>> slotEntry : set.slots.entrySet()) {
+            
             List<MobEquipmentReloadListener.WeightedItem> items = slotEntry.getValue();
             if (items.isEmpty()) continue;
             
             MobEquipmentReloadListener.WeightedItem chosen = pickWeightedItem(items);
+            
             ResourceLocation rl = safeParse(chosen.itemId);
             Item item = rl != null ? ForgeRegistries.ITEMS.getValue(rl) : null;
-            Item.getItemFromBlock(Blocks.BEDROCK); //stands out as "this id didn't resolve"
+            
+            if (item == null) item = Item.getItemFromBlock(Blocks.BEDROCK);
+            
             previewEntity.setItemStackToSlot(slotEntry.getKey(), new ItemStack(item));
         }
     }
@@ -299,50 +325,70 @@ public final class EditScreenShared {
     private static final int MAX_SCALE = 150;
     
     public static void renderPreviewEntity(int centerX, int centerY, int boxSize, EntityLiving entity) {
-        GlStateManager.enableColorMaterial();
-        GlStateManager.pushMatrix();
-        GlStateManager.translate((float) centerX, (float) centerY, 50.0F);
-        
-        int scale = MathHelper.clamp(Math.round(computeFitScale(entity, boxSize) * previewZoom), MIN_SCALE, MAX_SCALE);
-        GlStateManager.scale((float) (-scale), (float) scale, (float) scale);
-        GlStateManager.rotate(180.0F, 0.0F, 0.0F, 1.0F);
-        
+        int scale = MathHelper.clamp(
+                Math.round(computeFitScale(entity, boxSize) * previewZoom),
+                MIN_SCALE,
+                MAX_SCALE
+        );
+
         float prevRenderYawOffset = entity.renderYawOffset;
         float prevRotationYaw = entity.rotationYaw;
         float prevRotationPitch = entity.rotationPitch;
         float prevRotationYawHead = entity.rotationYawHead;
         float prevPrevRotationYawHead = entity.prevRotationYawHead;
-        
+
+        GlStateManager.enableColorMaterial();
+        GlStateManager.pushMatrix();
+        GlStateManager.translate((float) centerX, (float) centerY, 50.0F);
+        GlStateManager.scale((float) (-scale), (float) scale, (float) scale);
+        GlStateManager.rotate(180.0F, 0.0F, 0.0F, 1.0F);
+
         GlStateManager.rotate(135.0F, 0.0F, 1.0F, 0.0F);
         RenderHelper.enableStandardItemLighting();
         GlStateManager.rotate(-135.0F, 0.0F, 1.0F, 0.0F);
+
         GlStateManager.rotate(previewPitch, 1.0F, 0.0F, 0.0F);
-        
-        entity.renderYawOffset = 180.0F + previewYaw;
-        entity.rotationYaw = 180.0F + previewYaw;
-        entity.rotationPitch = 0F;
+
+        entity.renderYawOffset = previewYaw;
+        entity.rotationYaw = previewYaw;
+        entity.rotationPitch = 0.0F;
         entity.rotationYawHead = entity.rotationYaw;
         entity.prevRotationYawHead = entity.rotationYaw;
-        
+
         RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
-        renderManager.setPlayerViewY(180.0F);
+
         boolean prevShadow = renderManager.isRenderShadow();
         renderManager.setRenderShadow(false);
-        renderManager.renderEntity(entity, 0.0D, 0.0D, 0.0D, 0.0F, 1.0F, false);
+        renderManager.setPlayerViewY(180.0F);
+
+        renderManager.renderEntity(
+                entity,
+                0.0D,
+                0.0D,
+                0.0D,
+                0.0F,
+                1.0F,
+                false
+        );
+
         renderManager.setRenderShadow(prevShadow);
-        
+
         entity.renderYawOffset = prevRenderYawOffset;
         entity.rotationYaw = prevRotationYaw;
         entity.rotationPitch = prevRotationPitch;
         entity.rotationYawHead = prevRotationYawHead;
         entity.prevRotationYawHead = prevPrevRotationYawHead;
-        
+
         GlStateManager.popMatrix();
+
         RenderHelper.disableStandardItemLighting();
         GlStateManager.disableRescaleNormal();
+
         GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
         GlStateManager.disableTexture2D();
         GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
+
+        GlStateManager.color(1F, 1F, 1F, 1F);
     }
     
     private static int computeFitScale(EntityLiving entity, int boxSize) {

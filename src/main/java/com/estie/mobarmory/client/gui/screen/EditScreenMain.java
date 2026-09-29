@@ -106,12 +106,12 @@ public class EditScreenMain extends GuiScreen {
             case 1:
                 this.mc.displayGuiScreen(new TextInputScreen(
                         this,
-                        "Set Chance (0.0 - 1.0)",
+                        "Set Chance (-1.0 - 1.0)",
                         "" + entry.chance,
                         value -> {
                             try {
                                 float f = Float.parseFloat(value);
-                                entry.chance = MathHelper.clamp(f, 0f, 1f);
+                                entry.chance = MathHelper.clamp(f, -1f, 1f);
                                 updateBuilder();
                             } catch (Exception ignored) {
                             }
@@ -174,8 +174,8 @@ public class EditScreenMain extends GuiScreen {
         // --- INFO UNDER PREVIEW ---
         float chance = entry.chance;
         
-        String chanceLabel =
-                "Chance: " + (int) (chance * 100) + "%";
+        String val = entry.chance < 0.0F ? "Not Set" : (int)(chance * 100) + "%";
+        String chanceLabel = "Chance: " + val;
         
         this.drawCenteredString(
                 this.fontRenderer,

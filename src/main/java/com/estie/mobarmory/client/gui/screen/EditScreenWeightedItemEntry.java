@@ -103,6 +103,8 @@ public class EditScreenWeightedItemEntry extends GuiScreen {
                 20,
                 "Back"
         ));
+        
+        this.buttonList.add(new GuiButton(6, this.width / 2 - 50, this.height - 40, 100, 20, "Save"));
     }
     
     @Override
@@ -217,6 +219,20 @@ public class EditScreenWeightedItemEntry extends GuiScreen {
                         biomeGroup,
                         set,
                         slot
+                ));
+                break;
+                
+            case 6:
+                String initial = main.entry.fileName != null ? main.entry.fileName : "";
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Save As...",
+                        initial,
+                        name -> {
+                            main.entry.fileName = name;
+                            main.saveToFile();
+                            this.mc.displayGuiScreen(null);
+                        }
                 ));
                 break;
         }

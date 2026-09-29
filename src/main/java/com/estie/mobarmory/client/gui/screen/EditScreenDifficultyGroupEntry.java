@@ -38,6 +38,8 @@ public class EditScreenDifficultyGroupEntry extends GuiScreen {
         this.buttonList.add(new GuiButton(3, leftX, y, LEFT_PANEL_WIDTH, 20, "Delete Group"));
         y += 24;
         this.buttonList.add(new GuiButton(4, leftX, y, LEFT_PANEL_WIDTH, 20, "Back"));
+        
+        this.buttonList.add(new GuiButton(5, this.width / 2 - 50, this.height - 40, 100, 20, "Save"));
     }
     
     @Override
@@ -68,6 +70,20 @@ public class EditScreenDifficultyGroupEntry extends GuiScreen {
                 break;
             case 4:
                 this.mc.displayGuiScreen(new EditScreenDifficultyGroups(main));
+                break;
+            
+            case 5:
+                String initial = main.entry.fileName != null ? main.entry.fileName : "";
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Save As...",
+                        initial,
+                        name -> {
+                            main.entry.fileName = name;
+                            main.saveToFile();
+                            this.mc.displayGuiScreen(null);
+                        }
+                ));
                 break;
         }
     }
@@ -102,9 +118,17 @@ public class EditScreenDifficultyGroupEntry extends GuiScreen {
         
         int usedHeight = dy;
         
-        this.drawCenteredString(this.fontRenderer,
-                "Chance: " + (int) ((EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance) * 100) + "%",
-                previewX + PREVIEW_SIZE / 2, infoY + usedHeight + 4, 0xAAAAAA);
+        float effectiveChance = EditScreenShared.hasOverride(difficultyGroup.chance) ? difficultyGroup.chance : main.entry.chance;
+        
+        String chanceVal = effectiveChance < 0.0F ? "Not Set" : (int) (effectiveChance * 100) + "%";
+        
+        this.drawCenteredString(
+                this.fontRenderer,
+                "Chance: " + chanceVal,
+                previewX + PREVIEW_SIZE / 2,
+                infoY + usedHeight + 4,
+                0xAAAAAA
+        );
         
         this.drawCenteredString(this.fontRenderer,
                 "Biome Groups: " + difficultyGroup.biomeGroups.size(),

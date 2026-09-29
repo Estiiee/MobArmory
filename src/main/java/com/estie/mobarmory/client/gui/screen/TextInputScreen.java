@@ -139,12 +139,6 @@ public class TextInputScreen extends GuiScreen {
                 return;
             }
             
-            if (validator != null
-                    && !value.isEmpty()
-                    && !validator.test(value)) {
-                return;
-            }
-            
             onConfirm.accept(value);
             this.mc.displayGuiScreen(parent);
             return;

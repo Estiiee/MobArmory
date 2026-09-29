@@ -73,6 +73,8 @@ public class EditScreenEnchantEntry extends GuiScreen {
                 3, leftX, y, LEFT_PANEL_WIDTH, 20,
                 "Back"
         ));
+        
+        this.buttonList.add(new GuiButton(4, this.width / 2 - 50, this.height - 40, 100, 20, "Save"));
     }
     
     @Override
@@ -135,6 +137,20 @@ public class EditScreenEnchantEntry extends GuiScreen {
             case 3:
                 this.mc.displayGuiScreen(new EditScreenWeightedItemEntry(
                         main, difficultyGroup, biomeGroup, set, slot, item
+                ));
+                break;
+            
+            case 4:
+                String initial = main.entry.fileName != null ? main.entry.fileName : "";
+                this.mc.displayGuiScreen(new TextInputScreen(
+                        this,
+                        "Save As...",
+                        initial,
+                        name -> {
+                            main.entry.fileName = name;
+                            main.saveToFile();
+                            this.mc.displayGuiScreen(null);
+                        }
                 ));
                 break;
         }

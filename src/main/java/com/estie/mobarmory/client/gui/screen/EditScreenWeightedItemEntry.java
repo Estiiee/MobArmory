@@ -162,6 +162,7 @@ public class EditScreenWeightedItemEntry extends GuiScreen {
                         },
                         EditScreenShared::nbtValid,
                         "Warning: invalid NBT syntax",
+                        true,
                         true
                 ));
                 break;

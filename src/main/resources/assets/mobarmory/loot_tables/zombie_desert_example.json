@@ -1,16 +1,19 @@
 {
-  "type": "minecraft:entity",
   "pools": [
     {
+      "name": "obsidian",
       "rolls": 1,
       "entries": [
         {
-          "type": "minecraft:item",
+          "type": "item",
           "name": "minecraft:obsidian",
           "functions": [
             {
-              "function": "minecraft:set_count",
-              "count": 10
+              "function": "set_count",
+              "count": {
+                "min": 10,
+                "max": 10
+              }
             }
           ]
         }

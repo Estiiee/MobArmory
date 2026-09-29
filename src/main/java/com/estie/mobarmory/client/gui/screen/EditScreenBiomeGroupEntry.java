@@ -54,7 +54,7 @@ public class EditScreenBiomeGroupEntry extends GuiScreen {
             case 1:
                 this.mc.displayGuiScreen(new TextInputScreen(
                         this,
-                        "Set Chance (0.0 - 1.0)",
+                        "Set Chance (-1.0 - 1.0)",
                         "" + biomeGroup.chance,
                         value -> {
                             try {

@@ -208,6 +208,8 @@ public class EditScreenMain extends GuiScreen {
                 builder.createFile(entry.fileName);
         
         if (result.success) {
+            MobEquipmentReloadListener.addOrReplaceLookupFile(entry);
+            
             this.mc.player.sendStatusMessage(
                     new TextComponentString(
                             "Saved mob equipment to: " + result.path

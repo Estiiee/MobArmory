@@ -95,6 +95,27 @@ public class MobEquipmentReloadListener {
         }
     }
     
+    //for edit purposes only. upon saving in the editor, adds this file to the lookup list so it can be returned to at any point
+    //does not affect ENTRIES so the .json still has to be moved to the read folder with a game restart for mobs to spawn with it
+    public static void addOrReplaceLookupFile(MobEquipmentEntry entry) {
+        if (entry == null || entry.fileName == null) return;
+        
+        List<MobEquipmentEntry> updated = new ArrayList<>(LOOKUP_FILES);
+        
+        for (int i = 0; i < updated.size(); i++) {
+            MobEquipmentEntry existing = updated.get(i);
+            
+            if (entry.fileName.equals(existing.fileName)) {
+                updated.set(i, entry);
+                LOOKUP_FILES = Collections.unmodifiableList(updated);
+                return;
+            }
+        }
+        
+        updated.add(entry);
+        LOOKUP_FILES = Collections.unmodifiableList(updated);
+    }
+    
     private static void apply(Map<ResourceLocation, JsonElement> resources) {
         
         //group JSONs by mob ID. no override branch here - any two files targeting the same mob merge

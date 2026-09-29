@@ -1,5 +1,6 @@
 package com.estie.mobarmory.client.gui.widget;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -20,6 +21,8 @@ public class MultilineTextBox extends AbstractWidget {
     private final StringBuilder text = new StringBuilder();
     
     private int cursorPos = 0;
+    private int selectionStart = -1;
+    private boolean dragging = false;
     
     public MultilineTextBox(Font font, int x, int y, int width, int height, String initial) {
         super(x, y, width, height, Component.literal(""));
@@ -43,6 +46,7 @@ public class MultilineTextBox extends AbstractWidget {
         }
         
         cursorPos = text.length();
+        selectionStart = -1;
     }
     
     private List<FormattedCharSequence> wrappedLines() {
@@ -172,6 +176,8 @@ public class MultilineTextBox extends AbstractWidget {
                 break;
             }
             
+            drawSelection(gfx, line, lineY);
+            
             gfx.drawString(
                     font,
                     Component.literal(line.text),
@@ -225,6 +231,12 @@ public class MultilineTextBox extends AbstractWidget {
             return false;
         }
         
+        deleteSelection();
+        
+        if (text.length() >= MAX_LENGTH) {
+            return false;
+        }
+        
         text.insert(cursorPos, chr);
         cursorPos++;
         
@@ -239,9 +251,59 @@ public class MultilineTextBox extends AbstractWidget {
         
         boolean ctrl = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
         
+        if (ctrl) {
+            switch (keyCode) {
+                case GLFW.GLFW_KEY_A -> {
+                    selectionStart = 0;
+                    cursorPos = text.length();
+                    return true;
+                }
+                
+                case GLFW.GLFW_KEY_C -> {
+                    if (hasSelection()) {
+                        Minecraft.getInstance().keyboardHandler.setClipboard(getSelectedText());
+                    }
+                    return true;
+                }
+                
+                case GLFW.GLFW_KEY_X -> {
+                    if (hasSelection()) {
+                        Minecraft.getInstance().keyboardHandler.setClipboard(getSelectedText());
+                        deleteSelection();
+                    }
+                    return true;
+                }
+                
+                case GLFW.GLFW_KEY_V -> {
+                    String clipboard = Minecraft.getInstance().keyboardHandler.getClipboard();
+                    
+                    if (clipboard != null && !clipboard.isEmpty()) {
+                        clipboard = clipboard.replace("\r\n", "\n").replace('\r', '\n');
+                        
+                        deleteSelection();
+                        
+                        int remaining = MAX_LENGTH - text.length();
+                        if (remaining > 0) {
+                            clipboard = clipboard.substring(
+                                    0,
+                                    Math.min(clipboard.length(), remaining)
+                            );
+                            
+                            text.insert(cursorPos, clipboard);
+                            cursorPos += clipboard.length();
+                        }
+                    }
+                    
+                    return true;
+                }
+            }
+        }
+        
         switch (keyCode) {
             case GLFW.GLFW_KEY_BACKSPACE -> {
-                if (cursorPos > 0) {
+                if (hasSelection()) {
+                    deleteSelection();
+                } else if (cursorPos > 0) {
                     int start = ctrl
                             ? getPreviousWordBoundary(cursorPos)
                             : cursorPos - 1;
@@ -254,7 +316,9 @@ public class MultilineTextBox extends AbstractWidget {
             }
             
             case GLFW.GLFW_KEY_DELETE -> {
-                if (cursorPos < text.length()) {
+                if (hasSelection()) {
+                    deleteSelection();
+                } else if (cursorPos < text.length()) {
                     int end = ctrl
                             ? getNextWordBoundary(cursorPos)
                             : cursorPos + 1;
@@ -421,6 +485,8 @@ public class MultilineTextBox extends AbstractWidget {
         
         if (relativeX <= 0) {
             cursorPos = line.start;
+            selectionStart = cursorPos;
+            dragging = true;
             return;
         }
         
@@ -440,6 +506,53 @@ public class MultilineTextBox extends AbstractWidget {
         }
         
         cursorPos = bestPos;
+        selectionStart = bestPos;
+        dragging = true;
+    }
+    
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (!dragging) return false;
+        
+        List<LineInfo> lines = getLines();
+        
+        if (lines.isEmpty()) return true;
+        
+        int clickedLine = (int)((mouseY - getY() - 4) / font.lineHeight);
+        clickedLine = Mth.clamp(clickedLine, 0, lines.size() - 1);
+        
+        LineInfo line = lines.get(clickedLine);
+        
+        float relativeX = (float)(mouseX - getX() - 4);
+        
+        if (relativeX <= 0) {
+            cursorPos = line.start;
+            return true;
+        }
+        
+        int bestPos = line.start;
+        float bestDistance = Float.MAX_VALUE;
+        
+        for (int i = 0; i <= line.text.length(); i++) {
+            String before = line.text.substring(0, i);
+            float x = font.width(before);
+            
+            float distance = Math.abs(x - relativeX);
+            
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestPos = line.start + i;
+            }
+        }
+        
+        cursorPos = bestPos;
+        return true;
+    }
+    
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        dragging = false;
+        return true;
     }
     
     @Override
@@ -448,6 +561,60 @@ public class MultilineTextBox extends AbstractWidget {
                 NarratedElementType.TITLE,
                 Component.literal("NBT input")
         );
+    }
+    
+    private boolean hasSelection() {
+        return selectionStart != -1 && selectionStart != cursorPos;
+    }
+    
+    private void drawSelection(GuiGraphics gfx, LineInfo line, int lineY) {
+        if (!hasSelection()) return;
+        
+        int selectionStartPos = Math.min(selectionStart, cursorPos);
+        int selectionEndPos = Math.max(selectionStart, cursorPos);
+        
+        int start = Math.max(selectionStartPos, line.start);
+        int end = Math.min(selectionEndPos, line.end);
+        
+        if (start >= end) {
+            return;
+        }
+        
+        int startLocal = start - line.start;
+        int endLocal = end - line.start;
+        
+        String before = line.text.substring(0, startLocal);
+        String selected = line.text.substring(startLocal, endLocal);
+        
+        int x1 = getX() + 4 + font.width(before);
+        int x2 = x1 + font.width(selected);
+        
+        gfx.fill(
+                x1,
+                lineY,
+                x2,
+                lineY + font.lineHeight,
+                0xFF5555AA
+        );
+    }
+    
+    private String getSelectedText() {
+        int start = Math.min(selectionStart, cursorPos);
+        int end = Math.max(selectionStart, cursorPos);
+        return text.substring(start, end);
+    }
+    
+    private void deleteSelection() {
+        if (!hasSelection()) {
+            return;
+        }
+        
+        int start = Math.min(selectionStart, cursorPos);
+        int end = Math.max(selectionStart, cursorPos);
+        
+        text.delete(start, end);
+        cursorPos = start;
+        selectionStart = -1;
     }
     
     private record LineInfo(

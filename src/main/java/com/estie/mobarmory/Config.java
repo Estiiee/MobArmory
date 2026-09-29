@@ -19,6 +19,7 @@ public final class Config {
     private static final ForgeConfigSpec.BooleanValue ENABLED;
     private static final ForgeConfigSpec.BooleanValue CLIENT_ACCESSIBLE;
     private static final ForgeConfigSpec.BooleanValue SPAWN_EXAMPLE_ZOMBIE;
+    private static final ForgeConfigSpec.BooleanValue PLAYER_SINGLE_USE;
     
     static {
         BUILDER.push("General");
@@ -35,6 +36,10 @@ public final class Config {
                 "By default false as it's only meant to work as a demonstration")
                 .define("spawnExampleZombie", false);
         
+        PLAYER_SINGLE_USE = BUILDER.comment("If true, equipment sets for players are only applied on the first spawn. If false, on each respawn.",
+                        "Note that chance still applies, so for values lower than 1.0 the players may not get anything")
+                        .define("playerSingleUse", true);
+        
         BUILDER.pop();
         SPEC = BUILDER.build();
     }
@@ -48,6 +53,7 @@ public final class Config {
     public static boolean enabled;
     public static boolean clientAccessible;
     public static boolean spawnExampleZombie;
+    public static boolean playerSingleUse;
     
     // =========================================================
     // Sync
@@ -61,6 +67,7 @@ public final class Config {
         clientAccessible = CLIENT_ACCESSIBLE.get();
         outputDirectory = OUTPUT_DIRECTORY.get();
         spawnExampleZombie = SPAWN_EXAMPLE_ZOMBIE.get();
+        playerSingleUse = PLAYER_SINGLE_USE.get();
     }
     
     // =========================================================

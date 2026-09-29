@@ -133,7 +133,7 @@ public class EditScreenDifficultyGroupEntry extends Screen {
         
         String chanceVal = effectiveChance < 0.0F
                 ? "Not Set"
-                : (int)(effectiveChance * 100) + "%";
+                : (effectiveChance * 100) + "%";
         
         gfx.drawCenteredString(this.font,
                 "Chance: " + chanceVal,

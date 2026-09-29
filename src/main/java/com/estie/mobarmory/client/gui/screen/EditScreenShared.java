@@ -1,12 +1,14 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
@@ -25,6 +27,7 @@ import org.joml.Quaternionf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 public final class EditScreenShared {
     // -- Preview entity & equipment cycling --
@@ -103,8 +106,13 @@ public final class EditScreenShared {
             return;
         }
         
-        Entity created = type.create(level);
-        previewEntity = created instanceof LivingEntity living ? living : null;
+        if (entry.mob.equals(new ResourceLocation("minecraft", "player"))) {
+            GameProfile profile = Minecraft.getInstance().player.getGameProfile();
+            previewEntity = new RemotePlayer(level, profile);
+        } else {
+            Entity created = type.create(level);
+            previewEntity = created instanceof LivingEntity living ? living : null;
+        }
 
         if (previewEntity != null && previewSetIndex >= 0 && previewSetIndex < previewSets.size()) {
             applySetToPreview(previewSets.get(previewSetIndex));

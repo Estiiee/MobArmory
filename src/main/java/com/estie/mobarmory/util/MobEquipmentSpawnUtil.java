@@ -234,7 +234,7 @@ public final class MobEquipmentSpawnUtil {
     
     public static LivingEntity spawnMobWithSet(ServerLevel level, ResourceLocation mobId, MobEquipmentReloadListener.EquipmentSet set, Vec3 pos, MobSpawnType spawnType) {
         EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(mobId);
-        if (!(type != null && LivingEntity.class.isAssignableFrom(type.getBaseClass()))) return null;
+        if (type == null) return null;
         @SuppressWarnings("unchecked")
         EntityType<? extends LivingEntity> mobType = (EntityType<? extends LivingEntity>) type;
         return spawnMobWithSet(level, mobType, set, pos, spawnType);

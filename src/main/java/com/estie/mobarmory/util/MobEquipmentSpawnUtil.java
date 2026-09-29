@@ -7,6 +7,7 @@ import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.inventory.EntityEquipmentSlot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -31,7 +32,7 @@ public final class MobEquipmentSpawnUtil {
     private MobEquipmentSpawnUtil() {}
     
     // applying a set to an already-existing mob
-    public static void applyEquipmentSet(EntityLiving mob, MobEquipmentReloadListener.EquipmentSet set) {
+    public static void applyEquipmentSet(EntityLivingBase mob, MobEquipmentReloadListener.EquipmentSet set) {
         ResourceLocation mobId = EntityList.getKey(mob);
         
         for (Map.Entry<EntityEquipmentSlot, List<MobEquipmentReloadListener.WeightedItem>> slotEntry : set.slots.entrySet()) {
@@ -76,7 +77,7 @@ public final class MobEquipmentSpawnUtil {
     
     // matching sets
     
-    public static boolean tryAddRandomMatchingSet(EntityLiving mob, BlockPos pos) {
+    public static boolean tryAddRandomMatchingSet(EntityLivingBase mob, BlockPos pos) {
         List<EquipmentSetContext> candidates = getAllSetsMatchingCriteria(mob, pos);
         if (candidates.isEmpty()) return false;
         
@@ -89,7 +90,7 @@ public final class MobEquipmentSpawnUtil {
         return true;
     }
     
-    public static List<EquipmentSetContext> getAllSetsMatchingCriteria(EntityLiving mob, BlockPos pos) {
+    public static List<EquipmentSetContext> getAllSetsMatchingCriteria(EntityLivingBase mob, BlockPos pos) {
         ResourceLocation mobId = EntityList.getKey(mob);
         if (mobId == null) return Collections.emptyList();
         
@@ -239,35 +240,38 @@ public final class MobEquipmentSpawnUtil {
     
     // pick + spawn
     
-    public static EntityLiving spawnMobWithSet(WorldServer world, ResourceLocation mobId, MobEquipmentReloadListener.EquipmentSet set, Vec3d pos) {
+    public static EntityLivingBase spawnMobWithSet(WorldServer world, ResourceLocation mobId, MobEquipmentReloadListener.EquipmentSet set, Vec3d pos) {
         Class<? extends Entity> entityClass = EntityList.getClass(mobId);
-        if (entityClass == null || !EntityLiving.class.isAssignableFrom(entityClass)) return null;
+        if (entityClass == null) return null;
         
         Entity entity = EntityList.newEntity(entityClass, world);
-        if (!(entity instanceof EntityLiving)) return null;
+        if (!(entity instanceof EntityLivingBase)) return null;
         
-        EntityLiving mob = (EntityLiving) entity;
+        EntityLivingBase mob = (EntityLivingBase) entity;
         mob.setPositionAndRotation(pos.x, pos.y, pos.z, mob.rotationYaw, mob.rotationPitch);
         
         DifficultyInstance difficulty = world.getDifficultyForLocation(new BlockPos(pos));
-        mob.onInitialSpawn(difficulty, null);
+        if (mob instanceof EntityLiving) {
+            EntityLiving living = (EntityLiving) mob;
+            living.onInitialSpawn(difficulty, null);
+        }
         applyEquipmentSet(mob, set);
         world.spawnEntity(mob);
         
         return mob;
     }
     
-    public static EntityLiving spawnMobWithRandomSet(WorldServer world, ResourceLocation mobId, Vec3d pos, Random random) {
+    public static EntityLivingBase spawnMobWithRandomSet(WorldServer world, ResourceLocation mobId, Vec3d pos, Random random) {
         Optional<MobEquipmentReloadListener.EquipmentSet> chosen = pickRandomSetForMob(mobId, random);
         return chosen.map(equipmentSet -> spawnMobWithSet(world, mobId, equipmentSet, pos)).orElse(null);
     }
     
-    public static EntityLiving spawnMobWithRandomSetFromFile(WorldServer world, ResourceLocation mobId, String fileName, Vec3d pos, Random random) {
+    public static EntityLivingBase spawnMobWithRandomSetFromFile(WorldServer world, ResourceLocation mobId, String fileName, Vec3d pos, Random random) {
         Optional<MobEquipmentReloadListener.EquipmentSet> chosen = pickRandomSetFromFile(fileName, random);
         return chosen.map(equipmentSet -> spawnMobWithSet(world, mobId, equipmentSet, pos)).orElse(null);
     }
     
-    public static EntityLiving spawnMobWithRandomSetFromAnyMob(WorldServer world, ResourceLocation mobId, Vec3d pos, Random random) {
+    public static EntityLivingBase spawnMobWithRandomSetFromAnyMob(WorldServer world, ResourceLocation mobId, Vec3d pos, Random random) {
         Optional<MobEquipmentReloadListener.EquipmentSet> chosen = pickRandomSetFromAnyMob(random);
         return chosen.map(equipmentSet -> spawnMobWithSet(world, mobId, equipmentSet, pos)).orElse(null);
     }
@@ -290,7 +294,7 @@ public final class MobEquipmentSpawnUtil {
         }
     }
     
-    private static void applyMobNbt(EntityLiving mob, String rawNbt, ResourceLocation mobId) {
+    private static void applyMobNbt(EntityLivingBase mob, String rawNbt, ResourceLocation mobId) {
         try {
             String trimmed = rawNbt.trim();
             String wrapped = trimmed.startsWith("{") ? trimmed : "{" + trimmed + "}";

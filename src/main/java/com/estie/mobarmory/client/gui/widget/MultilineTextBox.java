@@ -1,5 +1,6 @@
 package com.estie.mobarmory.client.gui.widget;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
@@ -22,6 +23,9 @@ public class MultilineTextBox {
     
     private int cursorPos = 0;
     private boolean focused = false;
+    
+    private int selectionStart = -1;
+    private boolean dragging = false;
     
     public MultilineTextBox(
             FontRenderer font,
@@ -55,10 +59,15 @@ public class MultilineTextBox {
         }
         
         cursorPos = text.length();
+        selectionStart = -1;
     }
     
     public void setFocused(boolean focused) {
         this.focused = focused;
+        
+        if (!focused) {
+            dragging = false;
+        }
     }
     
     public boolean isFocused() {
@@ -150,6 +159,8 @@ public class MultilineTextBox {
                 break;
             }
             
+            drawSelection(line, lineY);
+            
             font.drawString(
                     line.text,
                     x + 4,
@@ -198,10 +209,61 @@ public class MultilineTextBox {
         }
         
         boolean ctrl = GuiScreen.isCtrlKeyDown();
+        boolean shift = GuiScreen.isShiftKeyDown();
+        
+        // Ctrl+A/C/X/V
+        if (ctrl) {
+            switch (keyCode) {
+                case Keyboard.KEY_A:
+                    selectionStart = 0;
+                    cursorPos = text.length();
+                    return true;
+                
+                case Keyboard.KEY_C:
+                    if (hasSelection()) {
+                        GuiScreen.setClipboardString(getSelectedText());
+                    }
+                    return true;
+                
+                case Keyboard.KEY_X:
+                    if (hasSelection()) {
+                        GuiScreen.setClipboardString(getSelectedText());
+                        deleteSelection();
+                    }
+                    return true;
+                
+                case Keyboard.KEY_V:
+                    String clipboard = GuiScreen.getClipboardString();
+                    
+                    if (clipboard != null && !clipboard.isEmpty()) {
+                        clipboard = clipboard
+                                .replace("\r\n", "\n")
+                                .replace('\r', '\n');
+                        
+                        deleteSelection();
+                        
+                        int remaining = MAX_LENGTH - text.length();
+                        
+                        if (remaining > 0) {
+                            clipboard = clipboard.substring(
+                                    0,
+                                    Math.min(clipboard.length(), remaining)
+                            );
+                            
+                            text.insert(cursorPos, clipboard);
+                            cursorPos += clipboard.length();
+                        }
+                    }
+                    
+                    return true;
+            }
+        }
         
         switch (keyCode) {
             case Keyboard.KEY_BACK:
-                if (cursorPos > 0) {
+                if (hasSelection()) {
+                    deleteSelection();
+                } else if (cursorPos > 0) {
                     int start = ctrl
                             ? getPreviousWordBoundary(cursorPos)
                             : cursorPos - 1;
@@ -213,7 +275,9 @@ public class MultilineTextBox {
                 return true;
             
             case Keyboard.KEY_DELETE:
-                if (cursorPos < text.length()) {
+                if (hasSelection()) {
+                    deleteSelection();
+                } else if (cursorPos < text.length()) {
                     int end = ctrl
                             ? getNextWordBoundary(cursorPos)
                             : cursorPos + 1;
@@ -224,40 +288,44 @@ public class MultilineTextBox {
                 return true;
             
             case Keyboard.KEY_LEFT:
-                if (ctrl) {
-                    cursorPos = getPreviousWordBoundary(cursorPos);
-                } else if (cursorPos > 0) {
-                    cursorPos--;
-                }
-                
+                moveCursorHorizontal(
+                        ctrl
+                                ? getPreviousWordBoundary(cursorPos)
+                                : Math.max(0, cursorPos - 1),
+                        shift
+                );
                 return true;
             
             case Keyboard.KEY_RIGHT:
-                if (ctrl) {
-                    cursorPos = getNextWordBoundary(cursorPos);
-                } else if (cursorPos < text.length()) {
-                    cursorPos++;
-                }
-                
+                moveCursorHorizontal(
+                        ctrl
+                                ? getNextWordBoundary(cursorPos)
+                                : Math.min(text.length(), cursorPos + 1),
+                        shift
+                );
                 return true;
             
             case Keyboard.KEY_HOME:
-                cursorPos = getLineStart(cursorPos);
+                moveCursorHorizontal(getLineStart(cursorPos), shift);
                 return true;
             
             case Keyboard.KEY_END:
-                cursorPos = getLineEnd(cursorPos);
+                moveCursorHorizontal(getLineEnd(cursorPos), shift);
                 return true;
             
             case Keyboard.KEY_UP:
-                moveCursorVertical(-1);
+                moveCursorVertical(-1, shift);
                 return true;
             
             case Keyboard.KEY_DOWN:
-                moveCursorVertical(1);
+                moveCursorVertical(1, shift);
                 return true;
             
             case Keyboard.KEY_RETURN:
+                if (hasSelection()) {
+                    deleteSelection();
+                }
+                
                 if (text.length() < MAX_LENGTH) {
                     text.insert(cursorPos, '\n');
                     cursorPos++;
@@ -267,16 +335,87 @@ public class MultilineTextBox {
             
             case Keyboard.KEY_ESCAPE:
                 focused = false;
+                dragging = false;
                 return true;
         }
         
-        if (typedChar >= 32 && text.length() < MAX_LENGTH) {
-            text.insert(cursorPos, typedChar);
-            cursorPos++;
-            return true;
+        if (typedChar >= 32) {
+            if (hasSelection()) {
+                deleteSelection();
+            }
+            
+            if (text.length() < MAX_LENGTH) {
+                text.insert(cursorPos, typedChar);
+                cursorPos++;
+                return true;
+            }
         }
         
         return false;
+    }
+    
+    public void mouseDragged(int mouseX, int mouseY) {
+        if (!dragging) {
+            return;
+        }
+        
+        if (mouseX < x || mouseX >= x + width
+                || mouseY < y || mouseY >= y + height) {
+            return;
+        }
+        
+        List<LineInfo> lines = getLines();
+        
+        if (lines.isEmpty()) {
+            cursorPos = 0;
+            return;
+        }
+        
+        int clickedLine = (mouseY - y - 4) / font.FONT_HEIGHT;
+        
+        clickedLine = MathHelper.clamp(
+                clickedLine,
+                0,
+                lines.size() - 1
+        );
+        
+        LineInfo line = lines.get(clickedLine);
+        
+        int relativeX = mouseX - x - 4;
+        
+        if (relativeX <= 0) {
+            cursorPos = line.start;
+            return;
+        }
+        
+        int bestPos = line.start;
+        int bestDistance = Integer.MAX_VALUE;
+        
+        for (int i = 0; i <= line.text.length(); i++) {
+            String before = line.text.substring(0, i);
+            int stringWidth = font.getStringWidth(before);
+            
+            int distance = Math.abs(stringWidth - relativeX);
+            
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestPos = line.start + i;
+            }
+        }
+        
+        cursorPos = bestPos;
+    }
+    
+    private void moveCursorHorizontal(int newPos, boolean shift) {
+        if (shift) {
+            if (selectionStart == -1) {
+                selectionStart = cursorPos;
+            }
+        } else {
+            selectionStart = -1;
+        }
+        
+        cursorPos = newPos;
     }
     
     private int getLineStart(int pos) {
@@ -321,7 +460,7 @@ public class MultilineTextBox {
         return i;
     }
     
-    private void moveCursorVertical(int direction) {
+    private void moveCursorVertical(int direction, boolean shift) {
         List<LineInfo> lines = getLines();
         
         if (lines.isEmpty()) {
@@ -348,7 +487,17 @@ public class MultilineTextBox {
                 target.text.length()
         );
         
-        cursorPos = target.start + targetOffset;
+        int newPos = target.start + targetOffset;
+        
+        if (shift) {
+            if (selectionStart == -1) {
+                selectionStart = cursorPos;
+            }
+        } else {
+            selectionStart = -1;
+        }
+        
+        cursorPos = newPos;
     }
     
     public void mouseClicked(int mouseX, int mouseY, int mouseButton) {
@@ -359,15 +508,18 @@ public class MultilineTextBox {
         if (mouseX < x || mouseX >= x + width
                 || mouseY < y || mouseY >= y + height) {
             focused = false;
+            dragging = false;
             return;
         }
         
         focused = true;
+        dragging = true;
         
         List<LineInfo> lines = getLines();
         
         if (lines.isEmpty()) {
             cursorPos = 0;
+            selectionStart = cursorPos;
             return;
         }
         
@@ -382,11 +534,6 @@ public class MultilineTextBox {
         LineInfo line = lines.get(clickedLine);
         
         int relativeX = mouseX - x - 4;
-        
-        if (relativeX <= 0) {
-            cursorPos = line.start;
-            return;
-        }
         
         int bestPos = line.start;
         int bestDistance = Integer.MAX_VALUE;
@@ -404,6 +551,113 @@ public class MultilineTextBox {
         }
         
         cursorPos = bestPos;
+        selectionStart = cursorPos;
+    }
+    
+    public void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        if (!dragging || clickedMouseButton != 0) {
+            return;
+        }
+        
+        List<LineInfo> lines = getLines();
+        
+        if (lines.isEmpty()) {
+            return;
+        }
+        
+        int clickedLine = (mouseY - y - 4) / font.FONT_HEIGHT;
+        
+        clickedLine = MathHelper.clamp(
+                clickedLine,
+                0,
+                lines.size() - 1
+        );
+        
+        LineInfo line = lines.get(clickedLine);
+        
+        int relativeX = mouseX - x - 4;
+        
+        int bestPos = line.start;
+        int bestDistance = Integer.MAX_VALUE;
+        
+        if (relativeX > 0) {
+            for (int i = 0; i <= line.text.length(); i++) {
+                String before = line.text.substring(0, i);
+                int stringWidth = font.getStringWidth(before);
+                
+                int distance = Math.abs(stringWidth - relativeX);
+                
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestPos = line.start + i;
+                }
+            }
+        }
+        
+        cursorPos = bestPos;
+    }
+    
+    public void mouseReleased(int mouseX, int mouseY, int mouseButton) {
+        if (mouseButton == 0) {
+            dragging = false;
+        }
+    }
+    
+    private boolean hasSelection() {
+        return selectionStart != -1 && selectionStart != cursorPos;
+    }
+    
+    private String getSelectedText() {
+        int start = Math.min(selectionStart, cursorPos);
+        int end = Math.max(selectionStart, cursorPos);
+        
+        return text.substring(start, end);
+    }
+    
+    private void deleteSelection() {
+        if (!hasSelection()) {
+            return;
+        }
+        
+        int start = Math.min(selectionStart, cursorPos);
+        int end = Math.max(selectionStart, cursorPos);
+        
+        text.delete(start, end);
+        cursorPos = start;
+        selectionStart = -1;
+    }
+    
+    private void drawSelection(LineInfo line, int lineY) {
+        if (!hasSelection()) {
+            return;
+        }
+        
+        int selectionStartPos = Math.min(selectionStart, cursorPos);
+        int selectionEndPos = Math.max(selectionStart, cursorPos);
+        
+        int start = Math.max(selectionStartPos, line.start);
+        int end = Math.min(selectionEndPos, line.end);
+        
+        if (start >= end) {
+            return;
+        }
+        
+        int startLocal = start - line.start;
+        int endLocal = end - line.start;
+        
+        String before = line.text.substring(0, startLocal);
+        String selected = line.text.substring(startLocal, endLocal);
+        
+        int x1 = x + 4 + font.getStringWidth(before);
+        int x2 = x1 + font.getStringWidth(selected);
+        
+        Gui.drawRect(
+                x1,
+                lineY,
+                x2,
+                lineY + font.FONT_HEIGHT,
+                0xFF5555AA
+        );
     }
     
     private static class LineInfo {

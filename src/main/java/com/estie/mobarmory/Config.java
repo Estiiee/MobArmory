@@ -22,6 +22,7 @@ public final class Config {
     public static boolean enabled;
     public static boolean clientAccessible;
     public static boolean spawnExampleZombie;
+    public static boolean playerSingleUse;
 
     public static void init(File configDir) {
         File mobArmoryDir = new File(configDir, MobArmory.MODID);
@@ -47,8 +48,8 @@ public final class Config {
                 CATEGORY_GENERAL,
                 true,
                 
-                "Whether clients can access server's mob equipment entries without operator permissions.",
-                "This option does not allow altering any server side data, all copies are created locally," +
+                "Whether clients can access server's mob equipment entries without operator permissions. " +
+                "This option does not allow altering any server side data, all copies are created locally, " +
                 "but it allows viewing and modifying server's mob equipment data on the client"
         );
         
@@ -70,8 +71,16 @@ public final class Config {
                 "spawnExampleZombie",
                 CATEGORY_GENERAL,
                 false,
-                "Should the game use the 'zombie_example' file for spawning mobs.",
-                "By default false as it's only meant to work as a demonstration"
+                "Should the game use the 'zombie_example' file for spawning mobs. " +
+                        "By default false as it's only meant to work as a demonstration"
+        );
+        
+        playerSingleUse = CONFIG.getBoolean(
+                "playerSingleUse",
+                CATEGORY_GENERAL,
+                true,
+                "If true, equipment sets for players are only applied on the first spawn. If false, on each respawn. " +
+                "Note that chance still applies, so for values lower than 1.0 the players may not get anything"
         );
         
         if (CONFIG.hasChanged()) {

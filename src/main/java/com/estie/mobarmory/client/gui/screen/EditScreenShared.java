@@ -2,7 +2,9 @@ package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.util.MobEquipmentSpawnUtil;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
+import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
@@ -12,7 +14,7 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
-import net.minecraft.entity.EntityLiving;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.init.Blocks;
 import net.minecraft.inventory.EntityEquipmentSlot;
 import net.minecraft.item.Item;
@@ -32,7 +34,7 @@ public final class EditScreenShared {
     private static final long CYCLE_INTERVAL_MS = 2000;
     private static final Random previewRandom = new Random();
     
-    private static EntityLiving previewEntity;
+    private static EntityLivingBase previewEntity;
     private static List<MobEquipmentReloadListener.EquipmentSet> previewSets = Collections.emptyList();
     private static int previewSetIndex = -1;
     private static long lastCycleTime = 0;
@@ -115,24 +117,34 @@ public final class EditScreenShared {
         return value != null && value >= 0.0F;
     }
     
-    public static void rebuildPreviewEntity(MobEquipmentReloadListener.MobEquipmentEntry entry, World world) {
+    public static void rebuildPreviewEntity(
+            MobEquipmentReloadListener.MobEquipmentEntry entry,
+            World world) {
+        
         if (entry.mob == null || world == null) {
             previewEntity = null;
             return;
         }
         
-        Class<? extends Entity> entityClass = EntityList.getClass(entry.mob);
-        if (entityClass == null || !EntityLiving.class.isAssignableFrom(entityClass)) {
-            previewEntity = null;
-            return;
+        if (entry.mob.equals(new ResourceLocation("minecraft", "player"))) {
+            if (Minecraft.getMinecraft().player != null) {
+                GameProfile profile = Minecraft.getMinecraft().player.getGameProfile();
+                previewEntity = new EntityOtherPlayerMP(world, profile);
+            }
+            else previewEntity = null;
+        } else {
+            Class<? extends Entity> entityClass = EntityList.getClass(entry.mob);
+            
+            if (entityClass == null || !EntityLivingBase.class.isAssignableFrom(entityClass)) {
+                previewEntity = null;
+                return;
+            }
+            
+            Entity created = EntityList.newEntity(entityClass, world);
+            previewEntity = created instanceof EntityLivingBase ? (EntityLivingBase) created : null;
         }
         
-        Entity created = EntityList.newEntity(entityClass, world);
-        previewEntity = created instanceof EntityLiving ? (EntityLiving) created : null;
-        
-        if (previewEntity != null && previewSetIndex >= 0 && previewSetIndex < previewSets.size()) {
-            applySetToPreview(previewSets.get(previewSetIndex));
-        }
+        if (previewEntity != null && previewSetIndex >= 0 && previewSetIndex < previewSets.size()) applySetToPreview(previewSets.get(previewSetIndex));
     }
     
     public static boolean mouseClicked(int mouseX, int mouseY, int button) {
@@ -201,7 +213,13 @@ public final class EditScreenShared {
     
     public static boolean mobExists(String rawId) {
         ResourceLocation rl = safeParse(rawId);
-        return rl != null && EntityList.getClass(rl) != null;
+        if (rl == null) return false;
+        
+        if (rl.equals(new ResourceLocation("minecraft", "player"))) {
+            return true;
+        }
+        
+        return EntityList.getClass(rl) != null;
     }
     
     public static boolean enchantExists(String rawId) {
@@ -324,7 +342,7 @@ public final class EditScreenShared {
     private static final int MIN_SCALE = 8;
     private static final int MAX_SCALE = 150;
     
-    public static void renderPreviewEntity(int centerX, int centerY, int boxSize, EntityLiving entity) {
+    public static void renderPreviewEntity(int centerX, int centerY, int boxSize, EntityLivingBase entity) {
         int scale = MathHelper.clamp(
                 Math.round(computeFitScale(entity, boxSize) * previewZoom),
                 MIN_SCALE,
@@ -394,7 +412,7 @@ public final class EditScreenShared {
         GlStateManager.color(1F, 1F, 1F, 1F);
     }
     
-    private static int computeFitScale(EntityLiving entity, int boxSize) {
+    private static int computeFitScale(EntityLivingBase entity, int boxSize) {
         AxisAlignedBB box = entity.getEntityBoundingBox();
         float width = (float) (box.maxX - box.minX);
         float height = (float) (box.maxY - box.minY);

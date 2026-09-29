@@ -174,7 +174,7 @@ public class EditScreenMain extends GuiScreen {
         // --- INFO UNDER PREVIEW ---
         float chance = entry.chance;
         
-        String val = entry.chance < 0.0F ? "Not Set" : (int)(chance * 100) + "%";
+        String val = entry.chance < 0.0F ? "Not Set" : (chance * 100) + "%";
         String chanceLabel = "Chance: " + val;
         
         this.drawCenteredString(

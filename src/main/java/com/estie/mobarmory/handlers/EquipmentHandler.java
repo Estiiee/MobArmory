@@ -4,9 +4,13 @@ import com.estie.mobarmory.Config;
 import com.estie.mobarmory.MobArmory;
 import com.estie.mobarmory.util.MobEquipmentSpawnUtil;
 import net.minecraft.entity.EntityLiving;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.monster.EntityMob;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
+import net.minecraft.stats.StatList;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.storage.loot.LootContext;
@@ -22,19 +26,27 @@ public class EquipmentHandler {
     @SubscribeEvent
     public static void onEntityJoinWorld(EntityJoinWorldEvent event) {
         if (!Config.enabled) return;
-        if (!(event.getEntity() instanceof EntityLiving)) return;
+        if (!(event.getEntity() instanceof EntityLivingBase)) return;
         if (event.getWorld().isRemote) return;
-        EntityLiving mob = (EntityLiving) event.getEntity();
+        
+        EntityLivingBase mob = (EntityLivingBase) event.getEntity();
+        
         if (mob.getEntityData().getBoolean("MobArmory_SpawnFlag")) return;
         mob.getEntityData().setBoolean("MobArmory_SpawnFlag", true);
+        
+        if (mob instanceof EntityPlayerMP) {
+            EntityPlayerMP player = (EntityPlayerMP) mob;
+            
+            int deaths = player.getStatFile().readStat(StatList.DEATHS);
+            if (deaths > 0 && Config.playerSingleUse) return;
+        }
         
         MobEquipmentSpawnUtil.tryAddRandomMatchingSet(mob, mob.getPosition());
     }
     
     @SubscribeEvent
     public static void onLivingDrops(LivingDropsEvent event) {
-        if (!(event.getEntityLiving() instanceof EntityMob)) return;
-        EntityMob mob = (EntityMob) event.getEntityLiving();
+        EntityLivingBase mob = event.getEntityLiving();
         if (!(mob.world instanceof WorldServer)) return;
         if (!mob.getEntityData().hasKey("MobArmoryLootTable")) return;
         

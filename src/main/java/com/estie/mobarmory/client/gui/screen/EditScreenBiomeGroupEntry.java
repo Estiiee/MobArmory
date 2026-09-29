@@ -124,7 +124,7 @@ public class EditScreenBiomeGroupEntry extends GuiScreen {
                 ? biomeGroup.chance : EditScreenShared.hasOverride(difficultyGroup.chance)
                 ? difficultyGroup.chance : main.entry.chance;
         
-        String chanceVal = effectiveChance < 0.0F ? "Not Set" : (int) (effectiveChance * 100) + "%";
+        String chanceVal = effectiveChance < 0.0F ? "Not Set" : (effectiveChance * 100) + "%";
         
         this.drawCenteredString(
                 this.fontRenderer,

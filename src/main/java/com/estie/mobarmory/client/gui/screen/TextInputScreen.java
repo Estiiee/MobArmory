@@ -200,6 +200,18 @@ public class TextInputScreen extends GuiScreen {
     }
     
     @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
+        super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        if (multilineBox != null) multilineBox.mouseDragged(mouseX, mouseY);
+    }
+    
+    @Override
+    protected void mouseReleased(int mouseX, int mouseY, int state) {
+        super.mouseReleased(mouseX, mouseY, state);
+        if (multilineBox != null) multilineBox.mouseReleased(mouseX, mouseY, state);
+    }
+    
+    @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         this.drawDefaultBackground();
         

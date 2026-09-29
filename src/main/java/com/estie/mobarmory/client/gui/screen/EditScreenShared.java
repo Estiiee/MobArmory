@@ -1,6 +1,6 @@
 package com.estie.mobarmory.client.gui.screen;
 
-import com.estie.mobarmory.MobEquipmentSpawnUtil;
+import com.estie.mobarmory.util.MobEquipmentSpawnUtil;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
@@ -348,7 +348,10 @@ public final class EditScreenShared {
         GlStateManager.rotate(-135.0F, 0.0F, 1.0F, 0.0F);
 
         GlStateManager.rotate(previewPitch, 1.0F, 0.0F, 0.0F);
-
+        
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240.0F, 240.0F);
+        
         entity.renderYawOffset = previewYaw;
         entity.rotationYaw = previewYaw;
         entity.rotationPitch = 0.0F;

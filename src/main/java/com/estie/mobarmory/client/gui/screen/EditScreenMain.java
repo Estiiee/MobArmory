@@ -55,7 +55,7 @@ public class EditScreenMain extends Screen {
         this.addRenderableWidget(Button.builder(
                 Component.literal("Chance"),
                 btn -> {
-                    this.minecraft.setScreen(new TextInputScreen(this, "Set Chance (0.0 - 1.0)", "" + entry.chance, value -> {
+                    this.minecraft.setScreen(new TextInputScreen(this, "Set Chance (-1.0 - 1.0)", "" + entry.chance, value -> {
                         try {
                             float f = Float.parseFloat(value);
                             entry.chance = Mth.clamp(f, -1f, 1f);

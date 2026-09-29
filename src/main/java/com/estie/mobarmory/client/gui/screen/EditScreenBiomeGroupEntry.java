@@ -43,7 +43,7 @@ public class EditScreenBiomeGroupEntry extends Screen {
                 Component.literal("Set Chance"),
                 btn -> this.minecraft.setScreen(new TextInputScreen(
                         this,
-                        "Set Chance (0.0 - 1.0)",
+                        "Set Chance (-1.0 - 1.0)",
                         "" + biomeGroup.chance,
                         value -> {
                             try {

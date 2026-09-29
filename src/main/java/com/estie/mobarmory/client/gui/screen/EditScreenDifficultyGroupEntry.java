@@ -42,7 +42,7 @@ public class EditScreenDifficultyGroupEntry extends Screen {
                 btn -> {
                     this.minecraft.setScreen(new TextInputScreen(
                             this,
-                            "Set Chance (0.0 - 1.0)",
+                            "Set Chance (-1.0 - 1.0)",
                             "" + difficultyGroup.chance,
                             value -> {
                                 try {

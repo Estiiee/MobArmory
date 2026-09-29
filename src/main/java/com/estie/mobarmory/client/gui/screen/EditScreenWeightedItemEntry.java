@@ -67,7 +67,7 @@ public class EditScreenWeightedItemEntry extends Screen {
                             item.nbt = value.isBlank() ? null : value;
                             this.minecraft.setScreen(new EditScreenWeightedItemEntry(main, difficultyGroup, biomeGroup, set, slot, item));
                         },
-                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true
+                        EditScreenShared::nbtValid, "Warning: invalid NBT syntax", true, true
                 ))
         ).bounds(leftX, y, LEFT_PANEL_WIDTH, 20).build());
         y += 24;

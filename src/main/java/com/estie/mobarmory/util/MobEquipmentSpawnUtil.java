@@ -8,6 +8,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.inventory.EntityEquipmentSlot;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -33,7 +34,7 @@ public final class MobEquipmentSpawnUtil {
     
     // applying a set to an already-existing mob
     public static void applyEquipmentSet(EntityLivingBase mob, MobEquipmentReloadListener.EquipmentSet set) {
-        ResourceLocation mobId = EntityList.getKey(mob);
+        ResourceLocation mobId = getMobId(mob);
         
         for (Map.Entry<EntityEquipmentSlot, List<MobEquipmentReloadListener.WeightedItem>> slotEntry : set.slots.entrySet()) {
             MobEquipmentReloadListener.WeightedItem chosen = pickWeightedItem(slotEntry.getValue(), mob.getRNG());
@@ -91,7 +92,7 @@ public final class MobEquipmentSpawnUtil {
     }
     
     public static List<EquipmentSetContext> getAllSetsMatchingCriteria(EntityLivingBase mob, BlockPos pos) {
-        ResourceLocation mobId = EntityList.getKey(mob);
+        ResourceLocation mobId = getMobId(mob);
         if (mobId == null) return Collections.emptyList();
         
         World world = mob.getEntityWorld();
@@ -374,5 +375,13 @@ public final class MobEquipmentSpawnUtil {
         }
         
         return sets.get(sets.size() - 1);
+    }
+    
+    private static ResourceLocation getMobId(EntityLivingBase mob) {
+        if (mob instanceof EntityPlayer) {
+            return new ResourceLocation("minecraft", "player");
+        }
+        
+        return EntityList.getKey(mob);
     }
 }

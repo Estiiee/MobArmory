@@ -47,6 +47,25 @@ dependencies {
 
 }
 
+processResources {
+    inputs.property "mod_version", project.mod_version
+    inputs.property "minecraft_version", project.minecraft_version
+    inputs.property "mod_description", project.mod_description
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand(
+                'mod_version'      : project.mod_version,
+                'minecraft_version': project.minecraft_version,
+                'mod_description'  : project.mod_description
+        )
+    }
+
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
+
 jar {
     manifest {
         attributes([

@@ -101,11 +101,7 @@ public class TextInputScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            this.minecraft.setScreen(new ConfirmScreen(
-                    confirmed -> this.minecraft.setScreen(confirmed ? null : this),
-                    Component.literal("Exit Editor"),
-                    Component.literal("Are you sure you want to exit? Unsaved changes will be lost.")
-            ));
+            this.minecraft.setScreen(parent);
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);

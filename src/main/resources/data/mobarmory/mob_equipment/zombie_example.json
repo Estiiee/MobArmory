@@ -12,6 +12,12 @@
           "match": [
             "#forge:is_snowy"
           ],
+          "dimensions": [
+            "minecraft:overworld"
+          ],
+          "structures": [
+            "minecraft:pillager_outpost"
+          ],
           "chance": -1.0,
           "sets": [
             {
@@ -61,6 +67,12 @@
         {
           "match": [
             "#forge:is_cave"
+          ],
+          "replacements": [
+            {
+              "mob": "minecraft:drowned",
+              "weight": 1
+            }
           ],
           "chance": -1.0,
           "sets": [
@@ -125,6 +137,10 @@
         {
           "match": [
             "#forge:is_desert"
+          ],
+          "spawn_types": [
+            "command",
+            "spawn_egg"
           ],
           "chance": -1.0,
           "sets": [

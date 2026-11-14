@@ -1,8 +1,8 @@
 package com.estie.mobarmory.packet;
 
+import com.estie.mobarmory.client.gui.screen.TreeEditorScreen;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.estie.mobarmory.client.gui.screen.EditScreenMain;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
@@ -41,7 +41,7 @@ public class OpenEditScreenPacket {
         ctx.get().enqueueWork(() -> {
             JsonObject obj = JsonParser.parseString(msg.json).getAsJsonObject();
             MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.fromJson(msg.fileName, obj);
-            Minecraft.getInstance().setScreen(new EditScreenMain(entry));
+            Minecraft.getInstance().setScreen(new TreeEditorScreen(entry));
         });
         ctx.get().setPacketHandled(true);
     }

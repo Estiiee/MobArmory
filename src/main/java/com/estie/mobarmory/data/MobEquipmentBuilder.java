@@ -174,6 +174,10 @@ public class MobEquipmentBuilder {
         private final List<String> matchers = new ArrayList<>();
         private Float chance = -1.0F;
         private final List<EquipmentSetBuilder> sets = new ArrayList<>();
+        private final List<String> dimensions = new ArrayList<>();
+        private final List<String> spawnTypes = new ArrayList<>();
+        private final List<String> structures = new ArrayList<>();
+        private final List<Map.Entry<String, Integer>> replacements = new ArrayList<>();
         
         public BiomeGroupBuilder(DifficultyGroupBuilder parent) {
             this.parent = parent;
@@ -194,6 +198,41 @@ public class MobEquipmentBuilder {
         //can be mixed with match(), in which case specific groups take priority and global acts as a fallback for all other biomes
         public BiomeGroupBuilder global() {
             matchers.add("global");
+            return this;
+        }
+        
+        public BiomeGroupBuilder dimension(String raw) {
+            dimensions.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder dimensions(String... raws) {
+            Collections.addAll(dimensions, raws);
+            return this;
+        }
+        
+        public BiomeGroupBuilder spawnType(String raw) {
+            spawnTypes.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder spawnTypes(String... raws) {
+            Collections.addAll(spawnTypes, raws);
+            return this;
+        }
+        
+        public BiomeGroupBuilder structure(String raw) {
+            structures.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder structures(String... raws) {
+            Collections.addAll(structures, raws);
+            return this;
+        }
+        
+        public BiomeGroupBuilder replacement(String mobId, int weight) {
+            replacements.add(Map.entry(mobId, weight));
             return this;
         }
         
@@ -221,6 +260,35 @@ public class MobEquipmentBuilder {
             JsonArray matchArr = new JsonArray();
             for (String m : matchers) matchArr.add(m);
             obj.add("match", matchArr);
+            
+            if (!dimensions.isEmpty()) {
+                JsonArray dimArr = new JsonArray();
+                for (String d : dimensions) dimArr.add(d);
+                obj.add("dimensions", dimArr);
+            }
+            
+            if (!spawnTypes.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (String s : spawnTypes) arr.add(s);
+                obj.add("spawn_types", arr);
+            }
+            
+            if (!structures.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (String s : structures) arr.add(s);
+                obj.add("structures", arr);
+            }
+            
+            if (!replacements.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (Map.Entry<String, Integer> r : replacements) {
+                    JsonObject o = new JsonObject();
+                    o.addProperty("mob", r.getKey());
+                    o.addProperty("weight", r.getValue());
+                    arr.add(o);
+                }
+                obj.add("replacements", arr);
+            }
             
             if (chance != null) obj.addProperty("chance", chance);
             

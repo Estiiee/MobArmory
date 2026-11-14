@@ -12,6 +12,7 @@ import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.registries.ForgeRegistries;
 
@@ -236,6 +237,35 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         for (BiomeMatch m : group.matchers) matchArr.add(biomeMatchToString(m));
         obj.add("match", matchArr);
         
+        if (!group.dimensions.isEmpty()) {
+            JsonArray dimArr = new JsonArray();
+            for (DimensionMatch d : group.dimensions) dimArr.add(dimensionMatchToString(d));
+            obj.add("dimensions", dimArr);
+        }
+        
+        if (!group.spawnTypes.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (SpawnTypeMatch s : group.spawnTypes) arr.add(spawnTypeMatchToString(s));
+            obj.add("spawn_types", arr);
+        }
+        
+        if (!group.structures.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (ResourceLocation s : group.structures) arr.add(s.toString());
+            obj.add("structures", arr);
+        }
+        
+        if (!group.replacements.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (MobReplacement r : group.replacements) {
+                JsonObject o = new JsonObject();
+                o.addProperty("mob", r.mob().toString());
+                o.addProperty("weight", r.weight());
+                arr.add(o);
+            }
+            obj.add("replacements", arr);
+        }
+        
         if (group.chance != null) obj.addProperty("chance", group.chance);
         
         JsonArray setArr = new JsonArray();
@@ -256,6 +286,31 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         if (raw.equals("global")) return new BiomeMatch.Global();
         else if (raw.startsWith("#")) return new BiomeMatch.Tag(new ResourceLocation(raw.substring(1)));
         else return new BiomeMatch.Id(new ResourceLocation(raw));
+    }
+    
+    public static String dimensionMatchToString(DimensionMatch match) {
+        if (match instanceof DimensionMatch.Global) return "global";
+        if (match instanceof DimensionMatch.Id i) return i.id().toString();
+        throw new IllegalStateException("Unknown DimensionMatch: " + match);
+    }
+    
+    public static DimensionMatch parseDimensionMatch(String raw) {
+        if (raw.equals("global")) return new DimensionMatch.Global();
+        return new DimensionMatch.Id(new ResourceLocation(raw));
+    }
+    
+    public static String spawnTypeMatchToString(SpawnTypeMatch match) {
+        return (match.negated() ? "!" : "") + match.type().name().toLowerCase(Locale.ROOT);
+    }
+    
+    public static SpawnTypeMatch parseSpawnTypeMatch(String raw) {
+        boolean negated = raw.startsWith("!");
+        String name = (negated ? raw.substring(1) : raw).trim().toUpperCase(Locale.ROOT);
+        try {
+            return new SpawnTypeMatch(MobSpawnType.valueOf(name), negated);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown spawn type '" + raw + "'");
+        }
     }
     
     private static JsonObject toJson(EquipmentSet set) {
@@ -394,6 +449,31 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
             else matchers.add(new BiomeMatch.Id(new ResourceLocation(raw)));
         }
         
+        List<DimensionMatch> dimensions = new ArrayList<>();
+        if (biomeObj.has("dimensions")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("dimensions")) dimensions.add(parseDimensionMatch(el.getAsString()));
+        }
+        
+        List<SpawnTypeMatch> spawnTypes = new ArrayList<>();
+        if (biomeObj.has("spawn_types")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("spawn_types")) spawnTypes.add(parseSpawnTypeMatch(el.getAsString()));
+        }
+        
+        List<ResourceLocation> structures = new ArrayList<>();
+        if (biomeObj.has("structures")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("structures")) structures.add(new ResourceLocation(el.getAsString()));
+        }
+        
+        List<MobReplacement> replacements = new ArrayList<>();
+        if (biomeObj.has("replacements")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("replacements")) {
+                JsonObject o = el.getAsJsonObject();
+                replacements.add(new MobReplacement(
+                        new ResourceLocation(GsonHelper.getAsString(o, "mob")),
+                        Math.max(1, GsonHelper.getAsInt(o, "weight", 1))));
+            }
+        }
+        
         //optional per-biome-group chance, overrides the difficulty group's/mob's chance
         Float groupChance = biomeObj.has("chance") ? biomeObj.get("chance").getAsFloat() : null;
         
@@ -409,7 +489,7 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
         //implicit single set: biomeObj itself is the set
         else sets.add(parseSet(biomeObj, sourceKey));
         
-        return new BiomeGroup(matchers, groupChance, sets);
+        return new BiomeGroup(matchers, groupChance, sets, dimensions, spawnTypes, structures, replacements);
     }
     
     private static EquipmentSet parseSet(JsonObject json, ResourceLocation sourceKey) {
@@ -557,23 +637,49 @@ public class MobEquipmentReloadListener extends SimpleJsonResourceReloadListener
     
     public static class BiomeGroup {
         public List<BiomeMatch> matchers;
-        public Float chance; // nullable
+        public Float chance; //nullable
         public List<EquipmentSet> sets;
+        public List<DimensionMatch> dimensions;
+        public List<SpawnTypeMatch> spawnTypes;
+        public List<ResourceLocation> structures; //empty = anywhere
+        public List<MobReplacement> replacements; //empty = keep the original mob
         
-        public BiomeGroup(List<BiomeMatch> matchers,
-                          Float chance,
-                          List<EquipmentSet> sets) {
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets) {
+            this(matchers, chance, sets, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions) {
+            this(matchers, chance, sets, dimensions, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions, List<SpawnTypeMatch> spawnTypes) {
+            this(matchers, chance, sets, dimensions, spawnTypes, new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions,
+                          List<SpawnTypeMatch> spawnTypes, List<ResourceLocation> structures, List<MobReplacement> replacements) {
             this.matchers = matchers;
             this.chance = chance;
             this.sets = sets;
+            this.dimensions = dimensions;
+            this.spawnTypes = spawnTypes;
+            this.structures = structures;
+            this.replacements = replacements;
         }
     }
-    
     public sealed interface BiomeMatch {
         record Tag(ResourceLocation tag) implements BiomeMatch {}
         record Id(ResourceLocation id) implements BiomeMatch {}
         record Global() implements BiomeMatch {}
     }
+    
+    public sealed interface DimensionMatch {
+        record Id(ResourceLocation id) implements DimensionMatch {}
+        record Global() implements DimensionMatch {}
+    }
+    
+    public record SpawnTypeMatch(MobSpawnType type, boolean negated) {}
+    public record MobReplacement(ResourceLocation mob, int weight) {}
     
     public static class WeightedItem {
         public String itemId;

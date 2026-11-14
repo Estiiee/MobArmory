@@ -4,6 +4,7 @@ import com.estie.mobarmory.MobArmory;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceKey;
@@ -12,10 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -23,15 +21,17 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public final class MobEquipmentSpawnUtil {
+    public static final String SPAWN_TYPE_TAG = "MobArmory_SpawnType";
+    public static final String LOOT_TABLE = "MobArmoryLootTable";
+    public static final String PROCESSED_TAG = "MobArmory_Processed";
+    
     private MobEquipmentSpawnUtil() {}
     
     //applying a set to an already-existing mob
@@ -62,7 +62,7 @@ public final class MobEquipmentSpawnUtil {
         }
         
         if (set.mobNbt != null) applyMobNbt(mob, set.mobNbt, mobId);
-        if (set.lootTable != null) mob.getPersistentData().putString("MobArmoryLootTable", set.lootTable);
+        if (set.lootTable != null) mob.getPersistentData().putString(LOOT_TABLE, set.lootTable);
         
         for (MobEquipmentReloadListener.PotionEffectEntry pe : set.potionEffects) {
             ResourceLocation rl = ResourceLocation.tryParse(pe.effectId);
@@ -73,6 +73,34 @@ public final class MobEquipmentSpawnUtil {
     }
     
     // matching sets
+    
+    public enum SpawnResult { UNCHANGED, EQUIPPED, REPLACED }
+    
+    public static SpawnResult processSpawn(LivingEntity mob, BlockPos pos) {
+        ReplacementPool pool = new ReplacementPool();
+        List<EquipmentSetContext> candidates = new ArrayList<>(collectMatches(mob, pos, pool));
+        
+        //a group with replacements but no usable set still replaces: empty set, that group's chance
+        if (candidates.isEmpty() && !pool.isEmpty() && pool.chance != null) {
+            candidates.add(new EquipmentSetContext(
+                    new MobEquipmentReloadListener.EquipmentSet(null, 1, new EnumMap<>(EquipmentSlot.class)), pool.chance));
+        }
+        if (candidates.isEmpty()) return SpawnResult.UNCHANGED;
+        
+        EquipmentSetContext chosen = pickWeightedSet(candidates, mob.getRandom());
+        if (chosen == null) return SpawnResult.UNCHANGED;
+        if (mob.getRandom().nextFloat() > chosen.chance()) return SpawnResult.UNCHANGED;
+        
+        ResourceLocation replacementId = pool.isEmpty() ? null : pool.pick(mob.getRandom());
+        ResourceLocation ownId = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
+        //picking the mob's own id means "keep it": still equipped, just not replaced
+        if (replacementId != null && !replacementId.equals(ownId)) {
+            if (spawnReplacement(mob, replacementId, chosen.equipmentSet()) != null) return SpawnResult.REPLACED;
+        }
+        
+        applyEquipmentSet(mob, chosen.equipmentSet());
+        return SpawnResult.EQUIPPED;
+    }
     
     public static boolean tryAddRandomMatchingSet(LivingEntity mob, BlockPos pos) {
         List<EquipmentSetContext> candidates = getAllSetsMatchingCriteria(mob, pos);
@@ -88,6 +116,10 @@ public final class MobEquipmentSpawnUtil {
     }
     
     public static List<EquipmentSetContext> getAllSetsMatchingCriteria(LivingEntity mob, BlockPos pos) {
+        return collectMatches(mob, pos, null);
+    }
+    
+    private static List<EquipmentSetContext> collectMatches(LivingEntity mob, BlockPos pos, ReplacementPool pool) {
         ResourceLocation mobId = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
         if (mobId == null) return Collections.emptyList();
         
@@ -138,8 +170,12 @@ public final class MobEquipmentSpawnUtil {
                 }
                 
                 if (!biomeMatches && !globalBiome) continue;
+                if (!dimensionMatches(biomeGroup.dimensions, level)) continue;
+                if (!spawnTypeMatches(biomeGroup.spawnTypes, mob)) continue;
+                if (!structureMatches(biomeGroup.structures, level, pos)) continue;
                 
                 float effectiveChance = hasOverride(biomeGroup.chance) ? biomeGroup.chance : difficultyChance;
+                if (pool != null) pool.add(biomeGroup.replacements, effectiveChance);
                 
                 //add every eligible set from this biome group.
                 for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
@@ -347,5 +383,108 @@ public final class MobEquipmentSpawnUtil {
         }
         
         return sets.get(sets.size() - 1);
+    }
+    
+    private static boolean dimensionMatches(List<MobEquipmentReloadListener.DimensionMatch> matchers, Level level) {
+        if (matchers.isEmpty()) return true;
+        ResourceLocation dimension = level.dimension().location();
+        for (MobEquipmentReloadListener.DimensionMatch matcher : matchers) {
+            if (matcher instanceof MobEquipmentReloadListener.DimensionMatch.Global) return true;
+            if (matcher instanceof MobEquipmentReloadListener.DimensionMatch.Id id && id.id().equals(dimension)) return true;
+        }
+        return false;
+    }
+    
+    private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, LivingEntity mob) {
+        if (matchers.isEmpty()) return true;
+        MobSpawnType actual = recordedSpawnType(mob); // null = unknown
+        boolean hasPositive = false, positiveMatched = false;
+        for (MobEquipmentReloadListener.SpawnTypeMatch m : matchers) {
+            if (m.negated()) {
+                if (m.type() == actual) return false;
+            } else {
+                hasPositive = true;
+                if (m.type() == actual) positiveMatched = true;
+            }
+        }
+        return !hasPositive || positiveMatched;
+    }
+    
+    private static MobSpawnType recordedSpawnType(LivingEntity mob) {
+        CompoundTag data = mob.getPersistentData();
+        if (!data.contains(SPAWN_TYPE_TAG)) return null;
+        try { return MobSpawnType.valueOf(data.getString(SPAWN_TYPE_TAG)); }
+        catch (IllegalArgumentException e) { return null; }
+    }
+    
+    private static LivingEntity spawnReplacement(LivingEntity original, ResourceLocation id, MobEquipmentReloadListener.EquipmentSet set) {
+        if (!(original.level() instanceof ServerLevel level)) return null;
+        //if (original.isPassenger() || original.isVehicle()) return null;
+        
+        if (!ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
+            MobArmory.LOGGER.warn("Unknown replacement mob {}", id);
+            return null;
+        }
+        
+        Entity created = ForgeRegistries.ENTITY_TYPES.getValue(id).create(level);
+        if (!(created instanceof Mob replacement)) {
+            if (created != null) created.discard();
+            MobArmory.LOGGER.warn("Replacement {} is not a Mob, ignoring", id);
+            return null;
+        }
+        
+        replacement.moveTo(original.getX(), original.getY(), original.getZ(), original.getYRot(), original.getXRot());
+        replacement.setYHeadRot(original.getYHeadRot());
+        
+        MobSpawnType spawnType = recordedSpawnType(original);
+        if (spawnType == null) spawnType = MobSpawnType.NATURAL;
+        replacement.finalizeSpawn(level, level.getCurrentDifficultyAt(replacement.blockPosition()), spawnType, null, null);
+        
+        CompoundTag data = replacement.getPersistentData();
+        data.putString(SPAWN_TYPE_TAG, spawnType.name());
+        data.putBoolean(PROCESSED_TAG, true); //so its own join event doesn't roll again
+        
+        applyEquipmentSet(replacement, set);
+        level.addFreshEntity(replacement);
+        return replacement;
+    }
+    
+    //a group matches when the position is inside a piece of any listed structure (empty list = anywhere)
+    private static boolean structureMatches(List<ResourceLocation> structures, Level level, BlockPos pos) {
+        if (structures.isEmpty()) return true;
+        if (!(level instanceof ServerLevel serverLevel)) return false;
+        for (ResourceLocation id : structures) {
+            ResourceKey<Structure> key = ResourceKey.create(Registries.STRUCTURE, id);
+            if (serverLevel.structureManager().getStructureWithPieceAt(pos, key).isValid()) return true;
+        }
+        return false;
+    }
+    
+    private static final class ReplacementPool {
+        final Map<ResourceLocation, Integer> weights = new LinkedHashMap<>();
+        Float chance; //effective chance of the first group that contributed anything
+        
+        void add(List<MobEquipmentReloadListener.MobReplacement> list, float groupChance) {
+            if (list.isEmpty()) return;
+            for (MobEquipmentReloadListener.MobReplacement r : list) weights.putIfAbsent(r.mob(), r.weight());
+            if (chance == null) chance = groupChance;
+        }
+        
+        boolean isEmpty() {
+            return weights.isEmpty();
+        }
+        
+        ResourceLocation pick(RandomSource random) {
+            int total = 0;
+            for (int w : weights.values()) total += w;
+            if (total <= 0) return null;
+            int roll = random.nextInt(total);
+            int cumulative = 0;
+            for (Map.Entry<ResourceLocation, Integer> e : weights.entrySet()) {
+                cumulative += e.getValue();
+                if (roll < cumulative) return e.getKey();
+            }
+            return null;
+        }
     }
 }

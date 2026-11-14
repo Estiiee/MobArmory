@@ -18,6 +18,7 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
+import net.minecraftforge.event.entity.living.MobSpawnEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -42,7 +43,13 @@ public class EquipmentHandler {
             return;
         }
         
-        MobEquipmentSpawnUtil.tryAddRandomMatchingSet(mob, mob.blockPosition());
+        if (mob.getPersistentData().getBoolean(MobEquipmentSpawnUtil.PROCESSED_TAG)) return;
+        if (MobEquipmentSpawnUtil.processSpawn(mob, mob.blockPosition()) == MobEquipmentSpawnUtil.SpawnResult.REPLACED) event.setCanceled(true);
+    }
+    
+    @SubscribeEvent
+    public static void onFinalizeSpawn(MobSpawnEvent.FinalizeSpawn event) {
+        event.getEntity().getPersistentData().putString(MobEquipmentSpawnUtil.SPAWN_TYPE_TAG, event.getSpawnType().name());
     }
     
     @SubscribeEvent

@@ -1,6 +1,7 @@
 package com.estie.mobarmory.client.gui.screen;
 
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
+import com.estie.mobarmory.util.MobEquipmentSpawnUtil;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -27,7 +28,6 @@ import org.joml.Quaternionf;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 
 public final class EditScreenShared {
     // -- Preview entity & equipment cycling --
@@ -273,12 +273,7 @@ public final class EditScreenShared {
     }
     
     private static List<MobEquipmentReloadListener.EquipmentSet> collectAllSets(MobEquipmentReloadListener.MobEquipmentEntry entry) {
-        List<MobEquipmentReloadListener.EquipmentSet> all = new ArrayList<>();
-        for (var dg : entry.difficultyGroups) {
-            for (var bg : dg.biomeGroups) all.addAll(bg.sets);
-            all.addAll(dg.globalSets);
-        }
-        return all;
+        return MobEquipmentSpawnUtil.collectAllSets(entry);
     }
     
     public static void renderPreviewEntity(GuiGraphics gfx, int centerX, int centerY, int boxSize, LivingEntity entity) {
@@ -366,43 +361,6 @@ public final class EditScreenShared {
     }
     
     public record Crumb(String label, Runnable onClick) {}
-    
-    public static Crumb crumbMain(MobEquipmentReloadListener.MobEquipmentEntry entry) {
-        return new Crumb("Main", () -> Minecraft.getInstance().setScreen(new EditScreenMain(entry)));
-    }
-    
-    public static Crumb crumbDifficultyGroup(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg) {
-        return new Crumb("Difficulty Group", () -> Minecraft.getInstance().setScreen(new EditScreenDifficultyGroupEntry(main, dg)));
-    }
-    
-    public static Crumb crumbBiomeGroup(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg, MobEquipmentReloadListener.BiomeGroup bg) {
-        return new Crumb("Biome Group", () -> Minecraft.getInstance().setScreen(new EditScreenBiomeGroupEntry(main, dg, bg)));
-    }
-    
-    public static Crumb crumbSet(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                 MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set) {
-        String label = set.name != null ? set.name : "Equipment Set";
-        return new Crumb(label, () -> Minecraft.getInstance().setScreen(new EditScreenEquipmentSetEntry(main, dg, bg, set)));
-    }
-    
-    public static Crumb crumbSlotsList(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                       MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set) {
-        return new Crumb("Slots", () -> Minecraft.getInstance().setScreen(new EditScreenSlots(main, dg, bg, set)));
-    }
-    
-    public static Crumb crumbSlot(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                  MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set,
-                                  EquipmentSlot slot) {
-        return new Crumb(EditScreenSlots.slotLabel(slot),
-                () -> Minecraft.getInstance().setScreen(new EditScreenSlotItems(main, dg, bg, set, slot)));
-    }
-    
-    public static Crumb crumbItem(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                  MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set,
-                                  EquipmentSlot slot, MobEquipmentReloadListener.WeightedItem item) {
-        return new Crumb("Item", () -> Minecraft.getInstance().setScreen(new EditScreenWeightedItemEntry(main, dg, bg, set, slot, item)));
-    }
-    
     public static Crumb current(String label) {
         return new Crumb(label, null);
     }

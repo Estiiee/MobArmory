@@ -419,7 +419,6 @@ public final class MobEquipmentSpawnUtil {
     
     private static LivingEntity spawnReplacement(LivingEntity original, ResourceLocation id, MobEquipmentReloadListener.EquipmentSet set) {
         if (!(original.level() instanceof ServerLevel level)) return null;
-        //if (original.isPassenger() || original.isVehicle()) return null;
         
         if (!ForgeRegistries.ENTITY_TYPES.containsKey(id)) {
             MobArmory.LOGGER.warn("Unknown replacement mob {}", id);
@@ -433,6 +432,10 @@ public final class MobEquipmentSpawnUtil {
             return null;
         }
         
+        //jockeys: remember who was riding whom before anything gets moved
+        List<Entity> riders = new ArrayList<>(original.getPassengers()); //original is the mount
+        Entity mount = original.getVehicle();                            //original is the rider
+        
         replacement.moveTo(original.getX(), original.getY(), original.getZ(), original.getYRot(), original.getXRot());
         replacement.setYHeadRot(original.getYHeadRot());
         
@@ -445,6 +448,20 @@ public final class MobEquipmentSpawnUtil {
         data.putBoolean(PROCESSED_TAG, true); //so its own join event doesn't roll again
         
         applyEquipmentSet(replacement, set);
+        
+        //replaced mount: its riders switch over to the replacement. they are still added to the world by the
+        //caller right after this join is cancelled, now riding the new mount
+        for (Entity rider : riders) {
+            rider.stopRiding();
+            rider.startRiding(replacement, true);
+        }
+        
+        //replaced rider: free the seat, then climb onto the same mount
+        if (mount != null) {
+            original.stopRiding();
+            replacement.startRiding(mount, true);
+        }
+        
         level.addFreshEntity(replacement);
         return replacement;
     }

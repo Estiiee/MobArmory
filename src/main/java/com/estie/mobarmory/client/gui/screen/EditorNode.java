@@ -1,5 +1,7 @@
 package com.estie.mobarmory.client.gui.screen;
 
+import net.minecraft.world.item.ItemStack;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -112,6 +114,10 @@ public final class EditorNode {
     public final List<Action> actions = new ArrayList<>();
     /** Non-null makes this a "+ Add ..." row: clicking it runs this instead of selecting it. */
     public Runnable activate;
+    /** Row label colour; the tree colours rows by type. */
+    public int color = 0xFFFFFF;
+    /** Optional icon drawn in front of the label when the tree has room for icons. */
+    public Supplier<ItemStack> icon;
     
     public EditorNode(EditorNode parent, Object key, Supplier<String> label, Supplier<String> summary) {
         this.parent = parent;

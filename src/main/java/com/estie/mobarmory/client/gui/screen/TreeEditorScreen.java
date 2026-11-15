@@ -12,6 +12,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -32,7 +33,8 @@ import java.util.function.Predicate;
  */
 public class TreeEditorScreen extends Screen {
     
-    private static final int ROW_H = 12;
+    private int rowH = 12;
+    private boolean icons;
     private static final int INDENT = 12;
     private static final int RIGHT_W = 190;
     private static final int LABEL_W = 64;
@@ -58,6 +60,8 @@ public class TreeEditorScreen extends Screen {
     private final List<Label> fieldLabels = new ArrayList<>();
     
     private boolean previewBuilt;
+    private boolean dirty;
+    private int tickCounter;
     private String snapshot;
     
     private String message = "";
@@ -77,11 +81,13 @@ public class TreeEditorScreen extends Screen {
         public void changed(Object selectKey) {
             rebuildTree(selectKey);
             rebuildWidgets();
+            EditScreenShared.refreshPreview();
         }
         
         @Override
         public void mobChanged() {
             EditScreenShared.rebuildPreviewEntity(entry, minecraft.level);
+            updatePreviewTarget();
         }
     };
     
@@ -95,6 +101,7 @@ public class TreeEditorScreen extends Screen {
         this.expanded.add(root.key);
         rebuildRows();
         this.snapshot = currentJson();
+        updatePreviewTarget();
     }
     
     //tree state
@@ -112,6 +119,7 @@ public class TreeEditorScreen extends Screen {
         message = "";
         rebuildRows();
         scrollToSelected();
+        updatePreviewTarget();
     }
     
     private static EditorNode find(EditorNode node, Object key) {
@@ -143,11 +151,17 @@ public class TreeEditorScreen extends Screen {
         return -1;
     }
     
+    //the preview cycles through the sets (and replacement mobs) under the current selection
+    private void updatePreviewTarget() {
+        EditScreenShared.setPreviewTarget(EditorTree.previewSets(selected), EditorTree.previewMobs(selected));
+    }
+    
     private void select(EditorNode node) {
         selected = node;
         selectedKey = node.key;
         message = "";
         scrollToSelected();
+        updatePreviewTarget();
         rebuildWidgets();
     }
     
@@ -171,7 +185,7 @@ public class TreeEditorScreen extends Screen {
     }
     
     private int maxScroll() {
-        return Math.max(0, rows.size() * ROW_H - treeH);
+        return Math.max(0, rows.size() * rowH - treeH);
     }
     
     private void clampScroll() {
@@ -181,9 +195,9 @@ public class TreeEditorScreen extends Screen {
     private void scrollToSelected() {
         int idx = indexOf(selected);
         if (idx < 0) return;
-        int top = idx * ROW_H;
+        int top = idx * rowH;
         if (top < scroll) scroll = top;
-        else if (top + ROW_H > scroll + treeH) scroll = top + ROW_H - treeH;
+        else if (top + rowH > scroll + treeH) scroll = top + rowH - treeH;
         clampScroll();
     }
     
@@ -201,12 +215,14 @@ public class TreeEditorScreen extends Screen {
         treeY = 40;
         treeW = rightX - 10 - treeX;
         treeH = this.height - 48 - treeY;
+        icons = this.height >= 300; //icons need 16px rows; the compact layout keeps 12px rows and no icons
+        rowH = icons ? 16 : 12;
         clampScroll();
         
         //the preview shrinks to make room for the inspector
         int needed = 0;
         if (selected != null) {
-            needed = 14 + selected.actions.size() * 22 + 16;
+            needed = 14 + selected.actions.size() * 20 + 16;
             for (EditorNode.Field f : selected.fields) needed += fieldHeight(f);
         }
         previewSize = Mth.clamp(this.height - 10 - 74 - needed, 36, 100);
@@ -230,9 +246,11 @@ public class TreeEditorScreen extends Screen {
                 y += fieldHeight(f);
             }
             for (EditorNode.Action a : selected.actions) {
-                this.addRenderableWidget(Button.builder(Component.literal(a.label()), btn -> runAction(a))
-                        .bounds(rightX, y, RIGHT_W, 18).build());
-                y += 22;
+                Button actionButton = Button.builder(Component.literal(a.label()), btn -> runAction(a))
+                        .bounds(rightX, y, RIGHT_W, 18).build();
+                if (a.label().startsWith("Delete")) actionButton.setFGColor(0xFF7777);
+                this.addRenderableWidget(actionButton);
+                y += 20;
             }
         }
         messageY = y + 2;
@@ -252,7 +270,7 @@ public class TreeEditorScreen extends Screen {
     }
     
     private static int fieldHeight(EditorNode.Field f) {
-        if (f.kind != EditorNode.Kind.TOGGLES) return 22;
+        if (f.kind != EditorNode.Kind.TOGGLES) return 20;
         return 12 + ((f.options.size() + 2) / 3) * 20 + 4; //label line + rows of three + gap
     }
     
@@ -358,6 +376,7 @@ public class TreeEditorScreen extends Screen {
         if (result.success) {
             MobEquipmentReloadListener.addOrReplaceLookupFile(entry);
             snapshot = currentJson();
+            dirty = false;
             setStatus("Saved " + result.path.getFileName(), 0x55FF55);
         } else {
             setStatus("Save failed: " + result.error.getMessage(), 0xFF5555);
@@ -370,16 +389,24 @@ public class TreeEditorScreen extends Screen {
         statusUntil = Util.getMillis() + STATUS_MS;
     }
     
+    @Override
+    public void tick() {
+        super.tick();
+        if (++tickCounter % 10 == 0) dirty = !currentJson().equals(snapshot);
+    }
+    
     //rendering
     
     @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(gfx);
         renderTree(gfx, mouseX, mouseY);
+        renderInspectorPanel(gfx);
         super.render(gfx, mouseX, mouseY, partialTick);
         
         EditScreenShared.renderHeader(gfx, font, entry, width, previewSize, pathTrail());
         renderInspectorText(gfx);
+        if (dirty) gfx.drawString(font, "* unsaved changes", treeX, 15, 0xFFAA00);
         
         if (Util.getMillis() < statusUntil) {
             gfx.drawCenteredString(font, status, treeX + treeW / 2, this.height - 40, statusColor);
@@ -402,56 +429,80 @@ public class TreeEditorScreen extends Screen {
     }
     
     private void renderTree(GuiGraphics gfx, int mouseX, int mouseY) {
-        gfx.fill(treeX, treeY, treeX + treeW, treeY + treeH, 0x80000000);
+        gfx.fill(treeX - 1, treeY - 1, treeX + treeW + 1, treeY + treeH + 1, 0xFF101010);
+        gfx.fill(treeX, treeY, treeX + treeW, treeY + treeH, 0xA0000000);
         gfx.enableScissor(treeX, treeY, treeX + treeW, treeY + treeH);
         
+        int textY = (rowH - font.lineHeight) / 2 + 1;
         for (int i = 0; i < rows.size(); i++) {
-            int y = treeY + i * ROW_H - scroll;
-            if (y + ROW_H < treeY || y > treeY + treeH) continue;
+            int y = treeY + i * rowH - scroll;
+            if (y + rowH < treeY || y > treeY + treeH) continue;
             
             Row row = rows.get(i);
             EditorNode node = row.node();
-            boolean hovered = mouseX >= treeX && mouseX < treeX + treeW && mouseY >= y && mouseY < y + ROW_H
+            boolean hovered = mouseX >= treeX && mouseX < treeX + treeW && mouseY >= y && mouseY < y + rowH
                     && mouseY >= treeY && mouseY < treeY + treeH;
             
-            if (node == selected) gfx.fill(treeX, y, treeX + treeW - 5, y + ROW_H, 0x80336699);
-            else if (hovered) gfx.fill(treeX, y, treeX + treeW - 5, y + ROW_H, 0x30FFFFFF);
+            if (node == selected) gfx.fill(treeX, y, treeX + treeW - 5, y + rowH, 0x80336699);
+            else if (hovered) gfx.fill(treeX, y, treeX + treeW - 5, y + rowH, 0x30FFFFFF);
+            
+            //indent guides: a faint vertical line under each ancestor's arrow
+            for (int d = 1; d <= row.depth(); d++) {
+                int gx = treeX + 4 + (d - 1) * INDENT + 4;
+                gfx.fill(gx, y, gx + 1, y + rowH, 0x28FFFFFF);
+            }
             
             int x = treeX + 4 + row.depth() * INDENT;
             if (node.isActionRow()) {
-                gfx.drawString(font, node.label.get(), x + 10, y + 2, 0x77DD77);
+                gfx.drawString(font, node.label.get(), x + 10, y + textY, 0x77DD77);
                 continue;
             }
             
             if (!node.children.isEmpty()) {
-                gfx.drawString(font, expanded.contains(node.key) ? "v" : ">", x, y + 2, 0xAAAAAA);
+                gfx.drawString(font, expanded.contains(node.key) ? "v" : ">", x, y + textY, 0xAAAAAA);
+            }
+            
+            int labelX = x + 10;
+            if (icons && node.icon != null) {
+                ItemStack stack = node.icon.get();
+                if (!stack.isEmpty()) gfx.renderItem(stack, labelX, y);
+                labelX += 18;
             }
             
             String label = node.label.get();
-            int labelX = x + 10;
             int maxW = treeX + treeW - 8 - labelX;
-            String shownLabel = font.plainSubstrByWidth(label, maxW);
-            gfx.drawString(font, shownLabel, labelX, y + 2, 0xFFFFFF);
+            gfx.drawString(font, font.plainSubstrByWidth(label, maxW), labelX, y + textY, node.color);
             
             String summary = node.summary.get();
             if (!summary.isEmpty() && font.width(label) < maxW - 12) {
                 int sx = labelX + font.width(label) + 8;
-                gfx.drawString(font, font.plainSubstrByWidth(summary, treeX + treeW - 8 - sx), sx, y + 2, 0x888888);
+                gfx.drawString(font, font.plainSubstrByWidth(summary, treeX + treeW - 8 - sx), sx, y + textY, 0x888888);
             }
         }
         gfx.disableScissor();
         
         int max = maxScroll();
         if (max > 0) {
-            int barH = Math.max(12, treeH * treeH / (rows.size() * ROW_H));
+            int barH = Math.max(12, treeH * treeH / (rows.size() * rowH));
             int barY = treeY + (int) ((long) scroll * (treeH - barH) / max);
             gfx.fill(treeX + treeW - 4, barY, treeX + treeW - 1, barY + barH, 0xFF888888);
         }
     }
     
+    //panel behind the inspector (drawn before the widgets) and a separator under its title
+    private void renderInspectorPanel(GuiGraphics gfx) {
+        int left = rightX - 6;
+        int top = inspectorTitleY - 6;
+        int right = this.width - 4;
+        int bottom = this.height - 6;
+        gfx.fill(left - 1, top - 1, right + 1, bottom + 1, 0xFF101010);
+        gfx.fill(left, top, right, bottom, 0xA0000000);
+        gfx.fill(rightX, inspectorTitleY + 11, rightX + RIGHT_W, inspectorTitleY + 12, 0x40FFFFFF);
+    }
+    
     private void renderInspectorText(GuiGraphics gfx) {
         if (selected == null) return;
-        gfx.drawString(font, font.plainSubstrByWidth(selected.label.get(), RIGHT_W), rightX, inspectorTitleY, 0xFFFF55);
+        gfx.drawString(font, font.plainSubstrByWidth(selected.label.get(), RIGHT_W), rightX, inspectorTitleY, selected.color);
         for (Label l : fieldLabels) {
             gfx.drawString(font, l.text(), l.x(), l.y(), 0xAAAAAA);
         }
@@ -568,7 +619,7 @@ public class TreeEditorScreen extends Screen {
     }
     
     private void clickTree(double mouseX, double mouseY) {
-        int idx = (int) ((mouseY - treeY + scroll) / ROW_H);
+        int idx = (int) ((mouseY - treeY + scroll) / rowH);
         if (idx < 0 || idx >= rows.size()) return;
         
         Row row = rows.get(idx);
@@ -605,7 +656,7 @@ public class TreeEditorScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (EditScreenShared.mouseScrolled(mouseX, mouseY, delta)) return true;
         if (inTree(mouseX, mouseY)) {
-            scroll -= (int) (delta * ROW_H * 3);
+            scroll -= (int) (delta * rowH * 3);
             clampScroll();
             return true;
         }

@@ -27,6 +27,7 @@ import org.joml.Quaternionf;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 
 public final class EditScreenShared {
@@ -35,8 +36,19 @@ public final class EditScreenShared {
     private static final Random previewRandom = new Random();
     
     private static LivingEntity previewEntity;
-    private static List<MobEquipmentReloadListener.EquipmentSet> previewSets = List.of();
-    private static int previewSetIndex = -1;
+    private static ResourceLocation previewMobId; //mob previewEntity was built for
+    private static MobEquipmentReloadListener.EquipmentSet shownSet;
+    private static String shownLabel = "";
+    
+    //what the preview cycles through. null/empty = defaults (every set of the entry, the entry's own mob).
+    //the tree editor narrows this down to whatever is selected
+    private static List<MobEquipmentReloadListener.EquipmentSet> poolSets = null;
+    private static List<ResourceLocation> poolMobs = List.of();
+    private static List<MobEquipmentReloadListener.EquipmentSet> lastSets = List.of();
+    private static List<ResourceLocation> lastMobs = List.of();
+    private static int step = -1;
+    private static int total = 1;
+    private static boolean paused = false;
     private static long lastCycleTime = 0;
     
     // -- Preview camera (drag-to-rotate, scroll-to-zoom) --
@@ -88,6 +100,8 @@ public final class EditScreenShared {
             gfx.drawCenteredString(font, entry.mob == null ? "(no mob chosen)" : "(preview unavailable)",
                     previewX + previewSize / 2, previewY + previewSize / 2 - 4, 0xFFFFFF);
         }
+        
+        renderPreviewOverlay(gfx, font);
     }
     
     public static boolean hasOverride(Float value) {
@@ -95,31 +109,35 @@ public final class EditScreenShared {
     }
     
     public static void rebuildPreviewEntity(MobEquipmentReloadListener.MobEquipmentEntry entry, ClientLevel level) {
-        if (entry.mob == null || level == null) {
-            previewEntity = null;
-            return;
-        }
+        showMob(entry.mob, level);
+        step = -1; //restart the cycle so the current set is applied to the new entity
+    }
+    
+    //the entity type registry is defaulted (unknown ids give a pig), so check the key first
+    private static void showMob(ResourceLocation id, ClientLevel level) {
+        previewMobId = id;
+        previewEntity = null;
+        if (id == null || level == null || !ForgeRegistries.ENTITY_TYPES.containsKey(id)) return;
         
-        EntityType<?> type = ForgeRegistries.ENTITY_TYPES.getValue(entry.mob);
-        if (type == null) {
-            previewEntity = null;
-            return;
-        }
-        
-        if (entry.mob.equals(new ResourceLocation("minecraft", "player"))) {
-            GameProfile profile = Minecraft.getInstance().player.getGameProfile();
-            previewEntity = new RemotePlayer(level, profile);
+        if (id.equals(new ResourceLocation("minecraft", "player"))) {
+            previewEntity = new RemotePlayer(level, Minecraft.getInstance().player.getGameProfile());
         } else {
-            Entity created = type.create(level);
+            Entity created = ForgeRegistries.ENTITY_TYPES.getValue(id).create(level);
             previewEntity = created instanceof LivingEntity living ? living : null;
-        }
-
-        if (previewEntity != null && previewSetIndex >= 0 && previewSetIndex < previewSets.size()) {
-            applySetToPreview(previewSets.get(previewSetIndex));
         }
     }
     
     public static boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && overlayVisible()) {
+            int barY = previewY + previewSize - BAR_H;
+            if (mouseX >= previewX && mouseX < previewX + previewSize && mouseY >= barY && mouseY < previewY + previewSize) {
+                if (mouseX < previewX + BAR_BUTTON_W) stepPreview(-1);
+                else if (mouseX >= previewX + previewSize - BAR_BUTTON_W) stepPreview(1);
+                else paused = !paused;
+                return true;
+            }
+        }
+        
         if (button == 0 && mouseX >= previewX && mouseX < previewX + previewSize
                 && mouseY >= previewY && mouseY < previewY + previewSize) {
             dragging = true;
@@ -212,7 +230,7 @@ public final class EditScreenShared {
         String idPart = raw.startsWith("#") ? raw.substring(1) : raw;
         ResourceLocation rl = ResourceLocation.tryParse(idPart);
         if (rl == null) return false;
-
+        
         if (raw.startsWith("#")) return true;
         
         ClientLevel level = Minecraft.getInstance().level;
@@ -251,25 +269,85 @@ public final class EditScreenShared {
         return items.get(items.size() - 1);
     }
     
-    private static void tickPreviewCycle(MobEquipmentReloadListener.MobEquipmentEntry entry) {
-        List<MobEquipmentReloadListener.EquipmentSet> sets = collectAllSets(entry);
+    public static void setPreviewTarget(List<MobEquipmentReloadListener.EquipmentSet> sets, List<ResourceLocation> mobs) {
+        poolSets = sets;
+        poolMobs = mobs != null ? mobs : List.of();
+    }
     
-        if (!sets.equals(previewSets)) {
-            previewSets = sets;
-            previewSetIndex = -1;
+    //re-applies the current step (e.g. after an item was added to the shown set)
+    public static void refreshPreview() {
+        if (step >= 0) showStep(step);
+    }
+    
+    //manual stepping from the overlay buttons
+    public static void stepPreview(int direction) {
+        if (total <= 1) return;
+        int next = (Math.max(step, 0) + direction) % total;
+        if (next < 0) next += total;
+        showStep(next);
+        lastCycleTime = Util.getMillis();
+    }
+    
+    private static void tickPreviewCycle(MobEquipmentReloadListener.MobEquipmentEntry entry) {
+        List<MobEquipmentReloadListener.EquipmentSet> sets = poolSets != null ? poolSets : collectAllSets(entry);
+        List<ResourceLocation> mobs = !poolMobs.isEmpty() ? poolMobs
+                : (entry.mob != null ? List.of(entry.mob) : List.of());
+        
+        if (!sets.equals(lastSets) || !mobs.equals(lastMobs)) {
+            lastSets = sets;
+            lastMobs = mobs;
+            step = -1; //new selection: start over
         }
         
-        if (previewSets.isEmpty()) {
-            applySetToPreview(null);
-            return;
-        }
+        total = Math.max(1, sets.size()) * Math.max(1, mobs.size());
         
         long now = Util.getMillis();
-        if (previewSetIndex == -1 || now - lastCycleTime >= CYCLE_INTERVAL_MS) {
-            previewSetIndex = (previewSetIndex + 1) % previewSets.size();
+        if (step == -1 || (!paused && now - lastCycleTime >= CYCLE_INTERVAL_MS)) {
+            showStep(step == -1 ? 0 : (step + 1) % total);
             lastCycleTime = now;
-            applySetToPreview(previewSets.get(previewSetIndex));
         }
+    }
+    
+    //one step = one (set, mob) pair: every set for the first mob, then every set for the next, ...
+    private static void showStep(int s) {
+        step = s;
+        int setCount = Math.max(1, lastSets.size());
+        int setIndex = s % setCount;
+        int mobIndex = (s / setCount) % Math.max(1, lastMobs.size());
+        
+        ResourceLocation mob = lastMobs.isEmpty() ? null : lastMobs.get(mobIndex);
+        if (!Objects.equals(mob, previewMobId)) showMob(mob, Minecraft.getInstance().level);
+        
+        shownSet = lastSets.isEmpty() ? null : lastSets.get(setIndex);
+        applySetToPreview(shownSet);
+        
+        String setName = shownSet == null ? "(no set)"
+                : (shownSet.name != null && !shownSet.name.isBlank() ? shownSet.name : "Set " + (setIndex + 1));
+        shownLabel = lastMobs.size() > 1 && mob != null ? setName + " - " + mob.getPath() : setName;
+    }
+    
+    //overlay: shown label at the top of the preview, < n/N > bar at the bottom. hidden when the preview is tiny
+    private static final int BAR_H = 12;
+    private static final int BAR_BUTTON_W = 14;
+    
+    private static boolean overlayVisible() {
+        return previewSize >= 60 && total > 1;
+    }
+    
+    private static void renderPreviewOverlay(GuiGraphics gfx, Font font) {
+        if (previewSize < 60) return;
+        
+        if (!shownLabel.isEmpty()) {
+            gfx.drawString(font, font.plainSubstrByWidth(shownLabel, previewSize - 6), previewX + 3, previewY + 3, 0xCCCCCC);
+        }
+        if (!overlayVisible()) return;
+        
+        int barY = previewY + previewSize - BAR_H;
+        gfx.fill(previewX, barY, previewX + previewSize, previewY + previewSize, 0x99000000);
+        gfx.drawString(font, "<", previewX + 5, barY + 2, 0xFFFFFF);
+        gfx.drawString(font, ">", previewX + previewSize - 10, barY + 2, 0xFFFFFF);
+        gfx.drawCenteredString(font, (paused ? "|| " : "") + (step + 1) + "/" + total,
+                previewX + previewSize / 2, barY + 2, paused ? 0xFFAA00 : 0xAAAAAA);
     }
     
     private static List<MobEquipmentReloadListener.EquipmentSet> collectAllSets(MobEquipmentReloadListener.MobEquipmentEntry entry) {

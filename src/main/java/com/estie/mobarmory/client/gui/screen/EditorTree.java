@@ -18,23 +18,35 @@ import com.estie.mobarmory.data.MobEquipmentReloadListener.TimeRange;
 import com.estie.mobarmory.data.MobEquipmentReloadListener.WeightedItem;
 import com.estie.mobarmory.data.MobEquipmentReloadListener.YComparator;
 import com.estie.mobarmory.data.MobEquipmentReloadListener.YLevelCondition;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.level.Level;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * Turns a MobEquipmentEntry into a EditorNode tree:
+ * Turns a MobEquipmentEntry into an EditorNode tree:
  * <p>
  *   mob
  *   +- difficulty group        (levels, chance)
@@ -63,6 +75,12 @@ public final class EditorTree {
         /** The mob id changed: rebuild the preview entity. */
         void mobChanged();
     }
+    
+    private static final int COLOR_DIFFICULTY = 0xFF9A8A;
+    private static final int COLOR_BIOME = 0x8FE08F;
+    private static final int COLOR_SET = 0xFFE066;
+    private static final int COLOR_POTION = 0xC9A8FF;
+    private static final int COLOR_SLOT = 0xB4C0D4;
     
     private record FolderKey(Object owner, String name) {}
     
@@ -117,6 +135,7 @@ public final class EditorTree {
         EditorNode root = new EditorNode(null, entry,
                 () -> "Mob: " + (entry.mob != null ? entry.mob.toString() : "(none)"),
                 () -> entry.chance >= 0 ? pct(entry.chance) : "");
+        root.icon = () -> mobIcon(entry);
         
         root.fields.add(Field.text("Mob ID",
                         () -> entry.mob != null ? entry.mob.toString() : "",
@@ -156,6 +175,8 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, g,
                 () -> "Difficulty: " + g.matchers.stream().map(DifficultyLevel::toString).collect(Collectors.joining(", ")),
                 () -> chanceSummary(g.chance));
+        n.color = COLOR_DIFFICULTY;
+        n.icon = () -> new ItemStack(Items.IRON_SWORD);
         
         DifficultyLevel[] levels = DifficultyLevel.values();
         List<String> levelNames = Arrays.stream(levels)
@@ -197,6 +218,8 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, bg,
                 () -> "Biomes: " + bg.matchers.stream().map(MobEquipmentReloadListener::biomeMatchToString).collect(Collectors.joining(", ")),
                 () -> biomeSummary(bg));
+        n.color = COLOR_BIOME;
+        n.icon = () -> new ItemStack(Items.GRASS_BLOCK);
         
         n.fields.add(Field.multiline("Biomes", "Biomes (one per line: global, #tag or minecraft:id)",
                         () -> bg.matchers.stream().map(MobEquipmentReloadListener::biomeMatchToString).collect(Collectors.joining("\n")),
@@ -232,7 +255,7 @@ public final class EditorTree {
                             bg.dimensions.addAll(parsed);
                             return null;
                         },
-                        v -> true, "")
+                        v -> splitList(v).stream().allMatch(EditorTree::dimensionKnown), "Warning: unknown dimension")
                 .buttonText(v -> listButton(v, "dimension", "(any)")));
         
         n.fields.add(Field.multiline("Spawn types", "Spawn types (e.g. natural, spawner, structure), ! excludes, empty = all", //(" + SPAWN_TYPE_NAMES + ")",
@@ -266,7 +289,7 @@ public final class EditorTree {
                             bg.structures.addAll(parsed);
                             return null;
                         },
-                        v -> true, "")
+                        v -> splitList(v).stream().allMatch(EditorTree::structureKnown), "Warning: unknown structure")
                 .buttonText(v -> listButton(v, "structure", "(anywhere)")));
         
         n.fields.add(Field.multiline("Replace with", "Replace the mob with (one per line: mob_id;weight, weight optional)",
@@ -322,6 +345,8 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, set,
                 () -> set.name != null && !set.name.isBlank() ? set.name : "Set " + (bg.sets.indexOf(set) + 1),
                 () -> setSummary(set));
+        n.color = COLOR_SET;
+        n.icon = () -> firstItem(set);
         
         n.fields.add(Field.text("Name",
                 () -> set.name != null ? set.name : "",
@@ -398,6 +423,8 @@ public final class EditorTree {
     private static EditorNode potionFolder(EditorNode parent, EquipmentSet set, Hooks h) {
         EditorNode n = new EditorNode(parent, new FolderKey(set, "potions"),
                 () -> "Potion effects (" + set.potionEffects.size() + ")", () -> "");
+        n.color = COLOR_POTION;
+        n.icon = () -> new ItemStack(Items.POTION);
         
         for (PotionEffectEntry pe : set.potionEffects) {
             n.children.add(effectNode(n, set, pe, h));
@@ -417,6 +444,8 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, pe,
                 () -> stripNamespace(pe.effectId),
                 () -> (pe.durationTicks / 20) + "s" + (pe.amplifier > 0 ? "  amp " + pe.amplifier : ""));
+        n.color = COLOR_POTION;
+        n.icon = () -> new ItemStack(Items.POTION);
         
         n.fields.add(Field.text("Effect",
                         () -> pe.effectId,
@@ -460,6 +489,11 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, new SlotKey(set, slot),
                 () -> slot.getName() + " (" + (set.slots.get(slot) == null ? 0 : set.slots.get(slot).size()) + ")",
                 () -> "");
+        n.color = COLOR_SLOT;
+        n.icon = () -> {
+            List<WeightedItem> list = set.slots.get(slot);
+            return list != null && !list.isEmpty() ? stackOf(list.get(0).itemId) : ItemStack.EMPTY;
+        };
         
         if (items != null) {
             for (WeightedItem item : items) {
@@ -481,6 +515,7 @@ public final class EditorTree {
         EditorNode n = new EditorNode(parent, item,
                 () -> stripNamespace(item.itemId),
                 () -> itemSummary(item));
+        n.icon = () -> stackOf(item.itemId);
         
         n.fields.add(Field.text("Item",
                         () -> item.itemId,
@@ -577,6 +612,83 @@ public final class EditorTree {
         return n;
     }
     
+    //preview + icons
+    
+    /** Sets the preview cycles through for this selection: inside a set it pins that set, above it everything below. */
+    public static List<EquipmentSet> previewSets(EditorNode selected) {
+        for (EditorNode p = selected; p != null; p = p.parent) {
+            if (p.key instanceof EquipmentSet set) return List.of(set);
+        }
+        List<EquipmentSet> out = new ArrayList<>();
+        collectSets(selected, out);
+        return out;
+    }
+    
+    private static void collectSets(EditorNode node, List<EquipmentSet> out) {
+        if (node.key instanceof EquipmentSet set) {
+            out.add(set);
+            return;
+        }
+        for (EditorNode c : node.children) collectSets(c, out);
+    }
+    
+    /**
+     * Mobs the preview cycles through: empty when nothing is replaced, otherwise the original mob
+     * first, then the replacements of the selected group (or of every group below the selection).
+     */
+    public static List<ResourceLocation> previewMobs(EditorNode selected) {
+        EditorNode group = null;
+        for (EditorNode p = selected; p != null; p = p.parent) {
+            if (p.key instanceof BiomeGroup) {
+                group = p;
+                break;
+            }
+        }
+        
+        LinkedHashSet<ResourceLocation> replacements = new LinkedHashSet<>();
+        collectReplacements(group != null ? group : selected, replacements);
+        if (replacements.isEmpty()) return List.of();
+        
+        EditorNode top = selected;
+        while (top.parent != null) top = top.parent;
+        
+        LinkedHashSet<ResourceLocation> mobs = new LinkedHashSet<>();
+        if (top.key instanceof MobEquipmentEntry entry && entry.mob != null) mobs.add(entry.mob);
+        mobs.addAll(replacements);
+        return new ArrayList<>(mobs);
+    }
+    
+    private static void collectReplacements(EditorNode node, LinkedHashSet<ResourceLocation> out) {
+        if (node.key instanceof BiomeGroup bg) {
+            for (MobReplacement r : bg.replacements) out.add(r.mob());
+            return;
+        }
+        for (EditorNode c : node.children) collectReplacements(c, out);
+    }
+    
+    private static ItemStack mobIcon(MobEquipmentEntry entry) {
+        if (entry.mob != null && ForgeRegistries.ENTITY_TYPES.containsKey(entry.mob)) {
+            SpawnEggItem egg = SpawnEggItem.byId(ForgeRegistries.ENTITY_TYPES.getValue(entry.mob));
+            if (egg != null) return new ItemStack(egg);
+        }
+        return new ItemStack(Items.ZOMBIE_HEAD);
+    }
+    
+    //unknown ids show a barrier, like the preview does
+    private static ItemStack stackOf(String itemId) {
+        ResourceLocation id = itemId == null ? null : ResourceLocation.tryParse(itemId);
+        if (id == null || !ForgeRegistries.ITEMS.containsKey(id)) return new ItemStack(Items.BARRIER);
+        return new ItemStack(ForgeRegistries.ITEMS.getValue(id));
+    }
+    
+    private static ItemStack firstItem(EquipmentSet set) {
+        for (EquipmentSlot slot : SLOTS) {
+            List<WeightedItem> list = set.slots.get(slot);
+            if (list != null && !list.isEmpty()) return stackOf(list.get(0).itemId);
+        }
+        return new ItemStack(Items.IRON_CHESTPLATE); //empty set
+    }
+    
     //helpers
     
     private static EditorNode addRow(EditorNode parent, String text, Runnable run) {
@@ -609,6 +721,31 @@ public final class EditorTree {
     private static final String SPAWN_TYPE_NAMES = Arrays.stream(MobSpawnType.values())
             .map(t -> t.name().toLowerCase(Locale.ROOT))
             .collect(Collectors.joining(", "));
+    
+    /** False only when we can positively tell the dimension doesn't exist (the client knows the server's dimension list). */
+    private static boolean dimensionKnown(String token) {
+        if (token.equals("global")) return true;
+        ResourceLocation id = ResourceLocation.tryParse(token);
+        if (id == null) return false;
+        
+        ClientPacketListener connection = Minecraft.getInstance().getConnection();
+        Set<ResourceKey<Level>> levels = connection != null ? connection.levels() : null;
+        if (levels == null) return true; // can't tell
+        return levels.contains(ResourceKey.create(Registries.DIMENSION, id));
+    }
+    
+    /**
+     * Structures aren't synced to clients, so only singleplayer (integrated server) can tell.
+     * On a dedicated server this never warns.
+     */
+    private static boolean structureKnown(String token) {
+        ResourceLocation id = ResourceLocation.tryParse(normalizeId(token));
+        if (id == null) return false;
+        
+        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) return true; // can't tell
+        return server.registryAccess().registryOrThrow(Registries.STRUCTURE).containsKey(id);
+    }
     
     private static boolean validSpawnType(String token) {
         try {

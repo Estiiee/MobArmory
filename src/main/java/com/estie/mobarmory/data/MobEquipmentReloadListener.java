@@ -4,6 +4,7 @@ import com.estie.mobarmory.Config;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.estie.mobarmory.MobArmory;
 import com.google.gson.JsonParser;
 import net.minecraft.inventory.EntityEquipmentSlot;
@@ -305,6 +306,35 @@ public class MobEquipmentReloadListener {
         
         if (group.chance != null) obj.addProperty("chance", group.chance);
         
+        if (!group.dimensions.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (DimensionMatch d : group.dimensions) arr.add(new JsonPrimitive(dimensionMatchToString(d)));
+            obj.add("dimensions", arr);
+        }
+        
+        if (!group.spawnTypes.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (SpawnTypeMatch t : group.spawnTypes) arr.add(new JsonPrimitive(spawnTypeMatchToString(t)));
+            obj.add("spawn_types", arr);
+        }
+        
+        if (!group.structures.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (String name : group.structures) arr.add(new JsonPrimitive(name));
+            obj.add("structures", arr);
+        }
+        
+        if (!group.replacements.isEmpty()) {
+            JsonArray arr = new JsonArray();
+            for (MobReplacement r : group.replacements) {
+                JsonObject o = new JsonObject();
+                o.addProperty("mob", r.mob().toString());
+                o.addProperty("weight", r.weight());
+                arr.add(o);
+            }
+            obj.add("replacements", arr);
+        }
+        
         JsonArray setArr = new JsonArray();
         for (EquipmentSet s : group.sets) setArr.add(toJson(s));
         obj.add("sets", setArr);
@@ -459,8 +489,8 @@ public class MobEquipmentReloadListener {
             
             //strings with colon (minecraft:plains) go to single biomes, without are treated as "tags"
             if (raw.equalsIgnoreCase("global")) matchers.add(new BiomeMatch.Global());
-             else if (raw.indexOf(':') >= 0) matchers.add(new BiomeMatch.Id(new ResourceLocation(raw)));
-             else matchers.add(new BiomeMatch.Tag(raw));
+            else if (raw.indexOf(':') >= 0) matchers.add(new BiomeMatch.Id(new ResourceLocation(raw)));
+            else matchers.add(new BiomeMatch.Tag(raw));
         }
         
         //optional per-biome-group chance, overrides the difficulty group's/mob's chance
@@ -478,7 +508,33 @@ public class MobEquipmentReloadListener {
         //implicit single set: biomeObj itself is the set
         else sets.add(parseSet(biomeObj, sourceKey));
         
-        return new BiomeGroup(matchers, groupChance, sets);
+        //optional extra matchers, all empty = no restriction
+        List<DimensionMatch> dimensions = new ArrayList<>();
+        if (biomeObj.has("dimensions")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("dimensions")) dimensions.add(parseDimensionMatch(el.getAsString()));
+        }
+        
+        List<SpawnTypeMatch> spawnTypes = new ArrayList<>();
+        if (biomeObj.has("spawn_types")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("spawn_types")) spawnTypes.add(parseSpawnTypeMatch(el.getAsString()));
+        }
+        
+        List<String> structures = new ArrayList<>();
+        if (biomeObj.has("structures")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("structures")) structures.add(el.getAsString().trim());
+        }
+        
+        List<MobReplacement> replacements = new ArrayList<>();
+        if (biomeObj.has("replacements")) {
+            for (JsonElement el : biomeObj.getAsJsonArray("replacements")) {
+                JsonObject o = el.getAsJsonObject();
+                replacements.add(new MobReplacement(
+                        new ResourceLocation(JsonUtils.getString(o, "mob")),
+                        Math.max(1, JsonUtils.getInt(o, "weight", 1))));
+            }
+        }
+        
+        return new BiomeGroup(matchers, groupChance, sets, dimensions, spawnTypes, structures, replacements);
     }
     
     private static EquipmentSet parseSet(JsonObject json, ResourceLocation sourceKey) {
@@ -628,14 +684,128 @@ public class MobEquipmentReloadListener {
         public List<BiomeMatch> matchers;
         public Float chance; // nullable
         public List<EquipmentSet> sets;
+        public List<DimensionMatch> dimensions;   //empty = any dimension
+        public List<SpawnTypeMatch> spawnTypes;   //empty = any spawn type
+        public List<String> structures;           //empty = anywhere. raw names, no ids here
+        public List<MobReplacement> replacements; //empty = keep the spawned mob
         
-        public BiomeGroup(List<BiomeMatch> matchers,
-                          Float chance,
-                          List<EquipmentSet> sets) {
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets) {
+            this(matchers, chance, sets, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions) {
+            this(matchers, chance, sets, dimensions, new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions, List<SpawnTypeMatch> spawnTypes) {
+            this(matchers, chance, sets, dimensions, spawnTypes, new ArrayList<>(), new ArrayList<>());
+        }
+        
+        public BiomeGroup(List<BiomeMatch> matchers, Float chance, List<EquipmentSet> sets, List<DimensionMatch> dimensions, List<SpawnTypeMatch> spawnTypes, List<String> structures, List<MobReplacement> replacements) {
             this.matchers = matchers;
             this.chance = chance;
             this.sets = sets;
+            this.dimensions = dimensions;
+            this.spawnTypes = spawnTypes;
+            this.structures = structures;
+            this.replacements = replacements;
         }
+    }
+    
+    //dimensions are plain ints in 1.12.2: 0 overworld, -1 nether, 1 end, anything else is a modded dimension.
+    //json accepts "global", an int ("-1" or -1), or the three vanilla ids so files stay portable with 1.20.1
+    public interface DimensionMatch {
+        final class Id implements DimensionMatch {
+            private final int dimension;
+            
+            public Id(int dimension) { this.dimension = dimension; }
+            public int dimension() { return dimension; }
+            
+            @Override public boolean equals(Object o) { return o instanceof Id && dimension == ((Id) o).dimension; }
+            @Override public int hashCode() { return dimension; }
+        }
+        
+        final class Global implements DimensionMatch {
+            @Override public boolean equals(Object o) { return o instanceof Global; }
+            @Override public int hashCode() { return 2; }
+        }
+    }
+    
+    //"natural", "!spawner" etc. names come from SpawnTypes.KNOWN (1.12.2 has no spawn type enum).
+    //a leading "!" excludes. realistically this will only work for spawner vs non-spawner types and
+    //more specific spawns have to be handled with code integration
+    public static class SpawnTypeMatch {
+        private final String type;
+        private final boolean negated;
+        
+        public SpawnTypeMatch(String type, boolean negated) {
+            this.type = type;
+            this.negated = negated;
+        }
+        
+        public String type() { return type; }
+        public boolean negated() { return negated; }
+        
+        @Override public boolean equals(Object o) {
+            return o instanceof SpawnTypeMatch && type.equals(((SpawnTypeMatch) o).type) && negated == ((SpawnTypeMatch) o).negated;
+        }
+        @Override public int hashCode() { return type.hashCode() * 31 + (negated ? 1 : 0); }
+    }
+    
+    //one weighted option of "replace the spawned mob with..."
+    public static class MobReplacement {
+        private final ResourceLocation mob;
+        private final int weight;
+        
+        public MobReplacement(ResourceLocation mob, int weight) {
+            this.mob = mob;
+            this.weight = weight;
+        }
+        
+        public ResourceLocation mob() { return mob; }
+        public int weight() { return weight; }
+        
+        @Override public boolean equals(Object o) {
+            return o instanceof MobReplacement && mob.equals(((MobReplacement) o).mob) && weight == ((MobReplacement) o).weight;
+        }
+        @Override public int hashCode() { return mob.hashCode() * 31 + weight; }
+    }
+    
+    public static String dimensionMatchToString(DimensionMatch match) {
+        if (match instanceof DimensionMatch.Global) return "global";
+        
+        int dim = ((DimensionMatch.Id) match).dimension();
+        if (dim == 0) return "minecraft:overworld";
+        if (dim == -1) return "minecraft:the_nether";
+        if (dim == 1) return "minecraft:the_end";
+        return String.valueOf(dim);
+    }
+    
+    public static DimensionMatch parseDimensionMatch(String raw) {
+        String s = raw.trim();
+        if (s.equalsIgnoreCase("global")) return new DimensionMatch.Global();
+        if (s.equalsIgnoreCase("minecraft:overworld")) return new DimensionMatch.Id(0);
+        if (s.equalsIgnoreCase("minecraft:the_nether")) return new DimensionMatch.Id(-1);
+        if (s.equalsIgnoreCase("minecraft:the_end")) return new DimensionMatch.Id(1);
+        
+        try {
+            return new DimensionMatch.Id(Integer.parseInt(s));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid dimension '" + raw + "' (use a dimension number, e.g. -1)");
+        }
+    }
+    
+    public static String spawnTypeMatchToString(SpawnTypeMatch match) {
+        return (match.negated() ? "!" : "") + match.type();
+    }
+    
+    public static SpawnTypeMatch parseSpawnTypeMatch(String raw) {
+        String s = raw.trim();
+        boolean negated = s.startsWith("!");
+        String name = (negated ? s.substring(1) : s).trim().toLowerCase(Locale.ROOT);
+        
+        if (!SpawnTypes.isKnown(name)) throw new IllegalArgumentException("Unknown spawn type '" + raw + "'");
+        return new SpawnTypeMatch(name, negated);
     }
     
     public interface BiomeMatch {

@@ -1,6 +1,7 @@
 package com.estie.mobarmory;
 
 import com.estie.mobarmory.command.MobArmoryCommands;
+import com.estie.mobarmory.data.MobEquipmentList;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import com.estie.mobarmory.handlers.PacketHandler;
 import net.minecraftforge.fml.common.Mod;
@@ -29,7 +30,7 @@ public class MobArmory {
     
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
-        //MobEquipmentList.init();
+        MobEquipmentList.init();
     }
     
     @Mod.EventHandler

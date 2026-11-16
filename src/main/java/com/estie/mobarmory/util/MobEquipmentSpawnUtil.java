@@ -32,6 +32,9 @@ public final class MobEquipmentSpawnUtil {
     
     private MobEquipmentSpawnUtil() {}
     
+    public static final String SPAWN_FLAG_TAG = "MobArmory_SpawnFlag"; //set on every mob that has been through the join handler
+    public static final String SPAWN_TYPE_TAG = "MobArmory_SpawnType";  //how the mob spawned, see SpawnTypeDetector
+    
     // applying a set to an already-existing mob
     public static void applyEquipmentSet(EntityLivingBase mob, MobEquipmentReloadListener.EquipmentSet set) {
         ResourceLocation mobId = getMobId(mob);
@@ -91,7 +94,44 @@ public final class MobEquipmentSpawnUtil {
         return true;
     }
     
+    public enum SpawnResult { UNCHANGED, EQUIPPED, REPLACEMENT_QUEUED }
+
+    public static SpawnResult processSpawn(EntityLivingBase mob, BlockPos pos) {
+        ReplacementPool pool = new ReplacementPool();
+        List<EquipmentSetContext> candidates = new ArrayList<>(collectMatches(mob, pos, pool, true));
+        
+        //a group with replacements but no usable set still replaces: empty set, that group's chance
+        if (candidates.isEmpty() && !pool.isEmpty() && pool.chance != null) {
+            candidates.add(new EquipmentSetContext(
+                    new MobEquipmentReloadListener.EquipmentSet(null, 1,
+                            new EnumMap<EntityEquipmentSlot, List<MobEquipmentReloadListener.WeightedItem>>(EntityEquipmentSlot.class)),
+                    pool.chance));
+        }
+        if (candidates.isEmpty()) return SpawnResult.UNCHANGED;
+        
+        EquipmentSetContext chosen = pickWeightedSet(candidates, mob.getRNG());
+        if (chosen == null) return SpawnResult.UNCHANGED;
+        if (mob.getRNG().nextFloat() > chosen.chance) return SpawnResult.UNCHANGED;
+        
+        ResourceLocation replacementId = pool.isEmpty() ? null : pool.pick(mob.getRNG());
+        ResourceLocation ownId = getMobId(mob);
+        
+        //picking the mob's own id means "keep it": still equipped, just not replaced
+        if (replacementId != null && !replacementId.equals(ownId)) {
+            PENDING.add(new PendingReplacement(mob, replacementId, chosen.equipmentSet));
+            return SpawnResult.REPLACEMENT_QUEUED;
+        }
+        
+        applyEquipmentSet(mob, chosen.equipmentSet);
+        return SpawnResult.EQUIPPED;
+    }
+    
     public static List<EquipmentSetContext> getAllSetsMatchingCriteria(EntityLivingBase mob, BlockPos pos) {
+        return collectMatches(mob, pos, null, false);
+    }
+    
+    //pool may be null (callers that only want sets). detectSpawnType is only true inside the join event
+    private static List<EquipmentSetContext> collectMatches(EntityLivingBase mob, BlockPos pos, ReplacementPool pool, boolean detectSpawnType) {
         ResourceLocation mobId = getMobId(mob);
         if (mobId == null) return Collections.emptyList();
         
@@ -101,6 +141,7 @@ public final class MobEquipmentSpawnUtil {
         if (entry == null) return Collections.emptyList();
         
         MobEquipmentReloadListener.DifficultyLevel currentDifficulty = currentDifficulty(world);
+        SpawnTypeLookup spawnType = new SpawnTypeLookup(mob, detectSpawnType);
         
         List<EquipmentSetContext> eligible = new ArrayList<>();
         
@@ -144,8 +185,12 @@ public final class MobEquipmentSpawnUtil {
                 }
                 
                 if (!biomeMatches && !globalBiome) continue;
+                if (!dimensionMatches(biomeGroup.dimensions, world)) continue;
+                if (!spawnTypeMatches(biomeGroup.spawnTypes, spawnType)) continue;
+                if (!biomeGroup.structures.isEmpty() && !StructureMatcher.isInsideAny(world, pos, biomeGroup.structures)) continue;
                 
                 float effectiveChance = hasOverride(biomeGroup.chance) ? biomeGroup.chance : difficultyChance;
+                if (pool != null) pool.add(biomeGroup.replacements, effectiveChance);
                 
                 //add every eligible set from this biome group.
                 for (MobEquipmentReloadListener.EquipmentSet set : biomeGroup.sets) {
@@ -166,6 +211,189 @@ public final class MobEquipmentSpawnUtil {
         }
         
         return eligible;
+    }
+    
+    // dimension / spawn type matching
+    
+    //empty = no restriction; otherwise any matcher (or "global") is enough
+    private static boolean dimensionMatches(List<MobEquipmentReloadListener.DimensionMatch> matchers, World world) {
+        if (matchers.isEmpty()) return true;
+        
+        int dimension = world.provider.getDimension();
+        for (MobEquipmentReloadListener.DimensionMatch matcher : matchers) {
+            if (matcher instanceof MobEquipmentReloadListener.DimensionMatch.Global) return true;
+            if (((MobEquipmentReloadListener.DimensionMatch.Id) matcher).dimension() == dimension) return true;
+        }
+        return false;
+    }
+    
+    //any "!x" that matches excludes. if there are plain entries, one of them has to match.
+    //a mob whose type is unknown only passes if every entry is a "!"
+    private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, SpawnTypeLookup lookup) {
+        if (matchers.isEmpty()) return true;
+        
+        String actual = lookup.get(); //null = unknown
+        boolean hasPositive = false;
+        boolean positiveMatched = false;
+        
+        for (MobEquipmentReloadListener.SpawnTypeMatch matcher : matchers) {
+            boolean same = matcher.type().equals(actual);
+            if (matcher.negated()) {
+                if (same) return false;
+            } else {
+                hasPositive = true;
+                if (same) positiveMatched = true;
+            }
+        }
+        return !hasPositive || positiveMatched;
+    }
+    
+    private static String recordedSpawnType(EntityLivingBase mob) {
+        return mob.getEntityData().hasKey(SPAWN_TYPE_TAG) ? mob.getEntityData().getString(SPAWN_TYPE_TAG) : null;
+    }
+    
+    //reads the recorded type, or (inside the join event only) detects it from the stack and records it. only asks once
+    private static final class SpawnTypeLookup {
+        private final EntityLivingBase mob;
+        private final boolean detect;
+        private boolean resolved;
+        private String value;
+        
+        SpawnTypeLookup(EntityLivingBase mob, boolean detect) {
+            this.mob = mob;
+            this.detect = detect;
+        }
+        
+        String get() {
+            if (!resolved) {
+                resolved = true;
+                value = recordedSpawnType(mob);
+                if (value == null && detect) {
+                    value = SpawnTypeDetector.detect();
+                    if (value != null) mob.getEntityData().setString(SPAWN_TYPE_TAG, value);
+                }
+            }
+            return value;
+        }
+    }
+    
+    // replacements
+    
+    //replacements from every matching group, merged. same id in several groups: the first one wins, later ones are dropped
+    private static final class ReplacementPool {
+        final Map<ResourceLocation, Integer> weights = new LinkedHashMap<>();
+        Float chance; //effective chance of the first group that contributed anything
+        
+        void add(List<MobEquipmentReloadListener.MobReplacement> list, float groupChance) {
+            if (list.isEmpty()) return;
+            
+            for (MobEquipmentReloadListener.MobReplacement r : list) {
+                if (!weights.containsKey(r.mob())) weights.put(r.mob(), r.weight());
+            }
+            if (chance == null) chance = groupChance;
+        }
+        
+        boolean isEmpty() {
+            return weights.isEmpty();
+        }
+        
+        ResourceLocation pick(Random random) {
+            int total = 0;
+            for (int w : weights.values()) total += w;
+            if (total <= 0) return null;
+            
+            int roll = random.nextInt(total);
+            int cumulative = 0;
+            for (Map.Entry<ResourceLocation, Integer> e : weights.entrySet()) {
+                cumulative += e.getValue();
+                if (roll < cumulative) return e.getKey();
+            }
+            return null;
+        }
+    }
+    
+    private static final class PendingReplacement {
+        final EntityLivingBase original;
+        final ResourceLocation replacementId;
+        final MobEquipmentReloadListener.EquipmentSet set;
+        
+        PendingReplacement(EntityLivingBase original, ResourceLocation replacementId, MobEquipmentReloadListener.EquipmentSet set) {
+            this.original = original;
+            this.replacementId = replacementId;
+            this.set = set;
+        }
+    }
+    
+    private static final List<PendingReplacement> PENDING = new ArrayList<>();
+    
+    /** Call once per server tick (end phase). By now riding relationships exist, so jockeys can be kept together. */
+    public static void runPendingReplacements() {
+        if (PENDING.isEmpty()) return;
+        
+        List<PendingReplacement> batch = new ArrayList<>(PENDING);
+        PENDING.clear();
+        
+        for (PendingReplacement pending : batch) {
+            EntityLivingBase original = pending.original;
+            if (original.isDead || !original.addedToChunk || original.world == null || original.world.isRemote) continue;
+            
+            spawnReplacement(original, pending.replacementId, pending.set);
+        }
+    }
+    
+    private static boolean spawnReplacement(EntityLivingBase original, ResourceLocation id, MobEquipmentReloadListener.EquipmentSet set) {
+        World world = original.world;
+        
+        Class<? extends Entity> entityClass = EntityList.getClass(id);
+        if (entityClass == null) {
+            MobArmory.LOGGER.warn("Unknown replacement mob {}", id);
+            return false;
+        }
+        
+        Entity created = EntityList.newEntity(entityClass, world);
+        if (!(created instanceof EntityLivingBase)) {
+            if (created != null) created.setDead();
+            MobArmory.LOGGER.warn("Replacement {} is not a living mob, ignoring", id);
+            return false;
+        }
+        EntityLivingBase replacement = (EntityLivingBase) created;
+        
+        //jockeys: remember who was riding whom before anything gets moved
+        List<Entity> riders = new ArrayList<>(original.getPassengers()); //original is the mount
+        Entity mount = original.getRidingEntity();                       //original is the rider
+        
+        replacement.setLocationAndAngles(original.posX, original.posY, original.posZ, original.rotationYaw, original.rotationPitch);
+        replacement.rotationYawHead = original.rotationYawHead;
+        
+        //so its own join event doesn't roll again, and it keeps the spawn type of the mob it replaces
+        replacement.getEntityData().setBoolean(SPAWN_FLAG_TAG, true);
+        String spawnType = recordedSpawnType(original);
+        if (spawnType != null) replacement.getEntityData().setString(SPAWN_TYPE_TAG, spawnType);
+        
+        if (replacement instanceof EntityLiving) {
+            ((EntityLiving) replacement).onInitialSpawn(world.getDifficultyForLocation(new BlockPos(replacement)), null);
+        }
+        applyEquipmentSet(replacement, set);
+        
+        if (!world.spawnEntity(replacement)) {
+            MobArmory.LOGGER.warn("Could not spawn replacement {}", id);
+            return false;
+        }
+        
+        //replaced mount: its riders switch over to the replacement
+        for (Entity rider : riders) {
+            rider.dismountRidingEntity();
+            rider.startRiding(replacement, true);
+        }
+        
+        //replaced rider: free the seat, then climb onto the same mount (force = ignore the passenger limit)
+        if (mount != null) {
+            original.dismountRidingEntity();
+            replacement.startRiding(mount, true);
+        }
+        
+        original.setDead();
+        return true;
     }
     
     // set lookup

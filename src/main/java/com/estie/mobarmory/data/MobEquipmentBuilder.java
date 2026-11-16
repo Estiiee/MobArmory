@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.estie.mobarmory.Config;
 import net.minecraft.util.ResourceLocation;
 
@@ -183,6 +184,10 @@ public class MobEquipmentBuilder {
         
         private final List<String> matchers = new ArrayList<>();
         private Float chance = -1.0F;
+        private final List<String> dimensions = new ArrayList<>();
+        private final List<String> spawnTypes = new ArrayList<>();
+        private final List<String> structures = new ArrayList<>();
+        private final List<Map.Entry<String, Integer>> replacements = new ArrayList<>();
         private final List<EquipmentSetBuilder> sets = new ArrayList<>();
         
         public BiomeGroupBuilder(DifficultyGroupBuilder parent) {
@@ -217,6 +222,46 @@ public class MobEquipmentBuilder {
             return this;
         }
         
+        //dimensions: a dimension number ("-1"), or "minecraft:overworld" / "minecraft:the_nether" / "minecraft:the_end".
+        //leave out for any dimension
+        public BiomeGroupBuilder dimension(String raw) {
+            dimensions.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder dimensions(String... raws) {
+            Collections.addAll(dimensions, raws);
+            return this;
+        }
+        
+        //spawn types from SpawnTypes.KNOWN, "!" excludes: "natural", "!spawner". empty = any
+        public BiomeGroupBuilder spawnType(String raw) {
+            spawnTypes.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder spawnTypes(String... raws) {
+            Collections.addAll(spawnTypes, raws);
+            return this;
+        }
+        
+        //structure names, e.g. "Village" or "Temple". probably won't get better than this in 1.12.2
+        public BiomeGroupBuilder structure(String raw) {
+            structures.add(raw);
+            return this;
+        }
+        
+        public BiomeGroupBuilder structures(String... raws) {
+            Collections.addAll(structures, raws);
+            return this;
+        }
+        
+        //replaces the spawned mob with one of these (weighted)
+        public BiomeGroupBuilder replacement(String mobId, int weight) {
+            replacements.add(new AbstractMap.SimpleEntry<>(mobId, weight));
+            return this;
+        }
+        
         //equipment set entry
         public EquipmentSetBuilder set() {
             EquipmentSetBuilder s = new EquipmentSetBuilder(this);
@@ -243,6 +288,35 @@ public class MobEquipmentBuilder {
             obj.add("match", matchArr);
             
             if (chance != null) obj.addProperty("chance", chance);
+            
+            if (!dimensions.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (String d : dimensions) arr.add(new JsonPrimitive(d));
+                obj.add("dimensions", arr);
+            }
+            
+            if (!spawnTypes.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (String t : spawnTypes) arr.add(new JsonPrimitive(t));
+                obj.add("spawn_types", arr);
+            }
+            
+            if (!structures.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (String name : structures) arr.add(new JsonPrimitive(name));
+                obj.add("structures", arr);
+            }
+            
+            if (!replacements.isEmpty()) {
+                JsonArray arr = new JsonArray();
+                for (Map.Entry<String, Integer> r : replacements) {
+                    JsonObject o = new JsonObject();
+                    o.addProperty("mob", r.getKey());
+                    o.addProperty("weight", r.getValue());
+                    arr.add(o);
+                }
+                obj.add("replacements", arr);
+            }
             
             if (!sets.isEmpty()) {
                 JsonArray setArr = new JsonArray();

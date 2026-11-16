@@ -16,6 +16,7 @@ import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 @Mod.EventBusSubscriber(modid = MobArmory.MODID)
 public class EquipmentHandler {
@@ -36,9 +37,19 @@ public class EquipmentHandler {
             
             int deaths = player.getStatFile().readStat(StatList.DEATHS);
             if (deaths > 0 && Config.playerSingleUse) return;
+            
+            //players are never replaced
+            MobEquipmentSpawnUtil.tryAddRandomMatchingSet(mob, mob.getPosition());
+            return;
         }
         
-        MobEquipmentSpawnUtil.tryAddRandomMatchingSet(mob, mob.getPosition());
+        //equips the mob, or queues a replacement that is carried out at the end of the tick
+        MobEquipmentSpawnUtil.processSpawn(mob, mob.getPosition());
+    }
+    
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) MobEquipmentSpawnUtil.runPendingReplacements();
     }
     
     @SubscribeEvent

@@ -95,11 +95,21 @@ public final class MobEquipmentSpawnUtil {
         ResourceLocation ownId = ForgeRegistries.ENTITY_TYPES.getKey(mob.getType());
         //picking the mob's own id means "keep it": still equipped, just not replaced
         if (replacementId != null && !replacementId.equals(ownId)) {
-            if (spawnReplacement(mob, replacementId, chosen.equipmentSet()) != null) return SpawnResult.REPLACED;
+            LivingEntity replacement = spawnReplacement(mob, replacementId, chosen.equipmentSet());
+            
+            if (replacement != null) {
+                mob.discard();
+                return SpawnResult.REPLACED;
+            }
         }
         
         applyEquipmentSet(mob, chosen.equipmentSet());
         return SpawnResult.EQUIPPED;
+    }
+    
+    public static void queueSpawnProcessing(LivingEntity mob, BlockPos pos) {
+        long processAt = mob.level().getGameTime() + 1;
+        PENDING_SPAWNS.add(new PendingSpawn(mob, pos.immutable(), processAt));
     }
     
     public static boolean tryAddRandomMatchingSet(LivingEntity mob, BlockPos pos) {
@@ -395,18 +405,31 @@ public final class MobEquipmentSpawnUtil {
         return false;
     }
     
+    /** Jockey spawn type is highly inconsistent, often only affecting one entity or not
+     * being set at all (chicken jockey receives the JOCKEY type, but spider jockey copies the type
+     * from the originally spawned mob) so this type has to be handled separately by checking for the
+     * entity's riders/mounts with a 1 tick delay after orignal spawn. MobSpawnType.JOCKEY is still used for validation and serialization.
+     */
     private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, LivingEntity mob) {
         if (matchers.isEmpty()) return true;
-        MobSpawnType actual = recordedSpawnType(mob); // null = unknown
-        boolean hasPositive = false, positiveMatched = false;
+        
+        MobSpawnType actual = recordedSpawnType(mob);
+        boolean hasPositive = false;
+        boolean positiveMatched = false;
+        
+        boolean jockey = mob.isPassenger() || !mob.getPassengers().isEmpty();
+        
         for (MobEquipmentReloadListener.SpawnTypeMatch m : matchers) {
+            boolean same = m.type() == MobSpawnType.JOCKEY ? jockey : m.type() == actual;
+            
             if (m.negated()) {
-                if (m.type() == actual) return false;
+                if (same) return false;
             } else {
                 hasPositive = true;
-                if (m.type() == actual) positiveMatched = true;
+                if (same) positiveMatched = true;
             }
         }
+        
         return !hasPositive || positiveMatched;
     }
     
@@ -432,7 +455,6 @@ public final class MobEquipmentSpawnUtil {
             return null;
         }
         
-        //jockeys: remember who was riding whom before anything gets moved
         List<Entity> riders = new ArrayList<>(original.getPassengers()); //original is the mount
         Entity mount = original.getVehicle();                            //original is the rider
         
@@ -441,6 +463,7 @@ public final class MobEquipmentSpawnUtil {
         
         MobSpawnType spawnType = recordedSpawnType(original);
         if (spawnType == null) spawnType = MobSpawnType.NATURAL;
+        
         replacement.finalizeSpawn(level, level.getCurrentDifficultyAt(replacement.blockPosition()), spawnType, null, null);
         
         CompoundTag data = replacement.getPersistentData();
@@ -449,20 +472,21 @@ public final class MobEquipmentSpawnUtil {
         
         applyEquipmentSet(replacement, set);
         
-        //replaced mount: its riders switch over to the replacement. they are still added to the world by the
-        //caller right after this join is cancelled, now riding the new mount
+        if (!level.addFreshEntity(replacement)) {
+            MobArmory.LOGGER.warn("Could not spawn replacement {}", id);
+            return null;
+        }
+
         for (Entity rider : riders) {
             rider.stopRiding();
             rider.startRiding(replacement, true);
         }
-        
-        //replaced rider: free the seat, then climb onto the same mount
+
         if (mount != null) {
             original.stopRiding();
             replacement.startRiding(mount, true);
         }
         
-        level.addFreshEntity(replacement);
         return replacement;
     }
     
@@ -502,6 +526,45 @@ public final class MobEquipmentSpawnUtil {
                 if (roll < cumulative) return e.getKey();
             }
             return null;
+        }
+    }
+    
+    public static void runPendingSpawns() {
+        if (PENDING_SPAWNS.isEmpty()) return;
+        
+        Iterator<PendingSpawn> iterator = PENDING_SPAWNS.iterator();
+        
+        while (iterator.hasNext()) {
+            PendingSpawn pending = iterator.next();
+            
+            LivingEntity mob = pending.mob;
+            
+            if (!(mob.level() instanceof ServerLevel level)) {
+                iterator.remove();
+                continue;
+            }
+            
+            if (level.getGameTime() < pending.processAt) continue;
+            
+            iterator.remove();
+            
+            if (!mob.isAlive() || mob.isRemoved()) continue;
+            
+            processSpawn(mob, pending.pos);
+        }
+    }
+    
+    private static final List<PendingSpawn> PENDING_SPAWNS = new ArrayList<>();
+    
+    private static final class PendingSpawn {
+        final LivingEntity mob;
+        final BlockPos pos;
+        final long processAt;
+        
+        PendingSpawn(LivingEntity mob, BlockPos pos, long processAt) {
+            this.mob = mob;
+            this.pos = pos;
+            this.processAt = processAt;
         }
     }
 }

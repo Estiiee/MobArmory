@@ -16,6 +16,7 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDropsEvent;
 import net.minecraftforge.event.entity.living.MobSpawnEvent;
@@ -44,12 +45,20 @@ public class EquipmentHandler {
         }
         
         if (mob.getPersistentData().getBoolean(MobEquipmentSpawnUtil.PROCESSED_TAG)) return;
-        if (MobEquipmentSpawnUtil.processSpawn(mob, mob.blockPosition()) == MobEquipmentSpawnUtil.SpawnResult.REPLACED) event.setCanceled(true);
+        
+        mob.getPersistentData().putBoolean(MobEquipmentSpawnUtil.PROCESSED_TAG, true);
+        MobEquipmentSpawnUtil.queueSpawnProcessing(mob, mob.blockPosition());
     }
     
     @SubscribeEvent
     public static void onFinalizeSpawn(MobSpawnEvent.FinalizeSpawn event) {
         event.getEntity().getPersistentData().putString(MobEquipmentSpawnUtil.SPAWN_TYPE_TAG, event.getSpawnType().name());
+    }
+    
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
+        MobEquipmentSpawnUtil.runPendingSpawns();
     }
     
     @SubscribeEvent

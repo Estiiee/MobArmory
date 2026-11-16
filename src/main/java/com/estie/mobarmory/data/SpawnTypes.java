@@ -10,8 +10,7 @@ import java.util.*;
  * <p>
  * Mutable in case of custom implementation.
  * <p>
- * Confirmed as working: natural, spawner, spawn_egg, structure, command, jockey (only the riding mob,
- * mounts fail this check)
+ * Confirmed as working: natural, spawner, spawn_egg, structure, command, jockey
  */
 public final class SpawnTypes {
     private SpawnTypes() {}

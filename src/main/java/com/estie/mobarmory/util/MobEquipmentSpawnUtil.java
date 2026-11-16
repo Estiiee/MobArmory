@@ -96,15 +96,15 @@ public final class MobEquipmentSpawnUtil {
     
     public enum SpawnResult { UNCHANGED, EQUIPPED, REPLACEMENT_QUEUED }
 
-    public static SpawnResult processSpawn(EntityLivingBase mob, BlockPos pos) {
+    public static SpawnResult processSpawnDelayed(EntityLivingBase mob, BlockPos pos) {
         ReplacementPool pool = new ReplacementPool();
-        List<EquipmentSetContext> candidates = new ArrayList<>(collectMatches(mob, pos, pool, true));
+        List<EquipmentSetContext> candidates = new ArrayList<>(collectMatches(mob, pos, pool, false));
         
         //a group with replacements but no usable set still replaces: empty set, that group's chance
         if (candidates.isEmpty() && !pool.isEmpty() && pool.chance != null) {
             candidates.add(new EquipmentSetContext(
                     new MobEquipmentReloadListener.EquipmentSet(null, 1,
-                            new EnumMap<EntityEquipmentSlot, List<MobEquipmentReloadListener.WeightedItem>>(EntityEquipmentSlot.class)),
+                            new EnumMap<>(EntityEquipmentSlot.class)),
                     pool.chance));
         }
         if (candidates.isEmpty()) return SpawnResult.UNCHANGED;
@@ -124,6 +124,15 @@ public final class MobEquipmentSpawnUtil {
         
         applyEquipmentSet(mob, chosen.equipmentSet);
         return SpawnResult.EQUIPPED;
+    }
+    
+    public static void queueSpawnProcessing(EntityLivingBase mob, BlockPos pos) {
+        if (!mob.getEntityData().hasKey(SPAWN_TYPE_TAG)) {
+            String type = SpawnTypeDetector.detect();
+            if (type != null) mob.getEntityData().setString(SPAWN_TYPE_TAG, type);
+        }
+        
+        PENDING_SPAWNS.add(new PendingSpawn(mob, pos, mob.world.getTotalWorldTime() + 1));
     }
     
     public static List<EquipmentSetContext> getAllSetsMatchingCriteria(EntityLivingBase mob, BlockPos pos) {
@@ -186,7 +195,7 @@ public final class MobEquipmentSpawnUtil {
                 
                 if (!biomeMatches && !globalBiome) continue;
                 if (!dimensionMatches(biomeGroup.dimensions, world)) continue;
-                if (!spawnTypeMatches(biomeGroup.spawnTypes, spawnType)) continue;
+                if (!spawnTypeMatches(biomeGroup.spawnTypes, mob, spawnType)) continue;
                 if (!biomeGroup.structures.isEmpty() && !StructureMatcher.isInsideAny(world, pos, biomeGroup.structures)) continue;
                 
                 float effectiveChance = hasOverride(biomeGroup.chance) ? biomeGroup.chance : difficultyChance;
@@ -229,15 +238,24 @@ public final class MobEquipmentSpawnUtil {
     
     //any "!x" that matches excludes. if there are plain entries, one of them has to match.
     //a mob whose type is unknown only passes if every entry is a "!"
-    private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, SpawnTypeLookup lookup) {
+    private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, EntityLivingBase mob, SpawnTypeLookup lookup) {
         if (matchers.isEmpty()) return true;
         
         String actual = lookup.get(); //null = unknown
         boolean hasPositive = false;
         boolean positiveMatched = false;
         
+        boolean jockey = mob.isRiding() || !mob.getPassengers().isEmpty();
+        
         for (MobEquipmentReloadListener.SpawnTypeMatch matcher : matchers) {
-            boolean same = matcher.type().equals(actual);
+            boolean same;
+            
+            if ("jockey".equals(matcher.type())) {
+                same = jockey;
+            } else {
+                same = matcher.type().equals(actual);
+            }
+            
             if (matcher.negated()) {
                 if (same) return false;
             } else {
@@ -328,7 +346,23 @@ public final class MobEquipmentSpawnUtil {
     
     /** Call once per server tick (end phase). By now riding relationships exist, so jockeys can be kept together. */
     public static void runPendingReplacements() {
-        if (PENDING.isEmpty()) return;
+        if (!PENDING_SPAWNS.isEmpty()) {
+            Iterator<PendingSpawn> iterator = PENDING_SPAWNS.iterator();
+            
+            while (iterator.hasNext()) {
+                PendingSpawn pending = iterator.next();
+                
+                if (pending.mob.world.getTotalWorldTime() < pending.processAt) continue;
+                
+                iterator.remove();
+                
+                EntityLivingBase mob = pending.mob;
+                
+                if (mob.isDead || !mob.addedToChunk || mob.world == null || mob.world.isRemote) continue;
+                
+                processSpawnDelayed(mob, pending.pos);
+            }
+        }
         
         List<PendingReplacement> batch = new ArrayList<>(PENDING);
         PENDING.clear();
@@ -611,5 +645,19 @@ public final class MobEquipmentSpawnUtil {
         }
         
         return EntityList.getKey(mob);
+    }
+    
+    private static final List<PendingSpawn> PENDING_SPAWNS = new ArrayList<>();
+    
+    private static final class PendingSpawn {
+        final EntityLivingBase mob;
+        final BlockPos pos;
+        final long processAt;
+        
+        PendingSpawn(EntityLivingBase mob, BlockPos pos, long processAt) {
+            this.mob = mob;
+            this.pos = pos;
+            this.processAt = processAt;
+        }
     }
 }

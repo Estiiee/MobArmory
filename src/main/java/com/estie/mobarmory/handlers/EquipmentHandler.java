@@ -44,7 +44,7 @@ public class EquipmentHandler {
         }
         
         //equips the mob, or queues a replacement that is carried out at the end of the tick
-        MobEquipmentSpawnUtil.processSpawn(mob, mob.getPosition());
+        MobEquipmentSpawnUtil.queueSpawnProcessing(mob, mob.getPosition());
     }
     
     @SubscribeEvent

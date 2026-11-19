@@ -4,7 +4,6 @@ import com.estie.mobarmory.client.gui.widget.MultilineTextBox;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
-import net.minecraft.client.gui.GuiYesNo;
 import org.lwjgl.input.Keyboard;
 
 import java.io.IOException;
@@ -161,15 +160,7 @@ public class TextInputScreen extends GuiScreen {
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (keyCode == Keyboard.KEY_ESCAPE) {
-            this.mc.displayGuiScreen(new GuiYesNo(
-                    (result, id) -> {
-                        if (result) mc.displayGuiScreen(null);
-                        else mc.displayGuiScreen(TextInputScreen.this);
-                    },
-                    "Exit Editor",
-                    "Are you sure you want to exit? Unsaved changes will be lost.",
-                    0
-            ));
+            this.mc.displayGuiScreen(parent); //cancel this field only
             return;
         }
         

@@ -57,6 +57,10 @@ public final class StructureMatcher {
         return alias != null ? alias : raw.trim();
     }
     
+    public static boolean isVanilla(String raw) {
+        return VANILLA.contains(resolve(raw));
+    }
+    
     public static boolean isInsideAny(World world, BlockPos pos, List<String> names) {
         for (String name : names) {
             if (isInside(world, pos, name)) return true;

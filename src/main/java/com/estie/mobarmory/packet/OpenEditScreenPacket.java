@@ -1,6 +1,6 @@
 package com.estie.mobarmory.packet;
 
-import com.estie.mobarmory.client.gui.screen.EditScreenMain;
+import com.estie.mobarmory.client.gui.screen.TreeEditorScreen;
 import com.estie.mobarmory.data.MobEquipmentReloadListener;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -51,7 +51,7 @@ public class OpenEditScreenPacket implements IMessage {
             mc.addScheduledTask(() -> {
                 JsonObject obj = new JsonParser().parse(msg.json).getAsJsonObject();
                 MobEquipmentReloadListener.MobEquipmentEntry entry = MobEquipmentReloadListener.fromJson(msg.fileName, obj);
-                mc.displayGuiScreen(new EditScreenMain(entry));
+                mc.displayGuiScreen(new TreeEditorScreen(entry));
             });
             return null;
         }

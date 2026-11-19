@@ -35,8 +35,19 @@ public final class EditScreenShared {
     private static final Random previewRandom = new Random();
     
     private static EntityLivingBase previewEntity;
-    private static List<MobEquipmentReloadListener.EquipmentSet> previewSets = Collections.emptyList();
-    private static int previewSetIndex = -1;
+    private static ResourceLocation previewMobId; //mob previewEntity was built for
+    private static MobEquipmentReloadListener.EquipmentSet shownSet;
+    private static String shownLabel = "";
+    
+    //what the preview cycles through. null/empty = defaults (every set of the entry, the entry's own mob).
+    //the tree editor narrows this down to whatever is selected
+    private static List<MobEquipmentReloadListener.EquipmentSet> poolSets = null;
+    private static List<ResourceLocation> poolMobs = Collections.emptyList();
+    private static List<MobEquipmentReloadListener.EquipmentSet> lastSets = Collections.emptyList();
+    private static List<ResourceLocation> lastMobs = Collections.emptyList();
+    private static int step = -1;
+    private static int total = 1;
+    private static boolean paused = false;
     private static long lastCycleTime = 0;
     
     // -- Preview camera (drag-to-rotate, scroll-to-zoom) --
@@ -90,6 +101,8 @@ public final class EditScreenShared {
             drawCentered(font, entry.mob == null ? "(no mob chosen)" : "(preview unavailable)",
                     previewX + previewSize / 2, previewY + previewSize / 2 - 4, 0xFFFFFF);
         }
+        
+        renderPreviewOverlay(font);
     }
     
     private static void drawCentered(FontRenderer font, String text, int centerX, int y, int color) {
@@ -121,33 +134,41 @@ public final class EditScreenShared {
             MobEquipmentReloadListener.MobEquipmentEntry entry,
             World world) {
         
-        if (entry.mob == null || world == null) {
-            previewEntity = null;
-            return;
-        }
+        showMob(entry.mob, world);
+        step = -1; //restart the cycle so the current set is applied to the new entity
+    }
+    
+    private static void showMob(ResourceLocation id, World world) {
+        previewMobId = id;
+        previewEntity = null;
+        if (id == null || world == null) return;
         
-        if (entry.mob.equals(new ResourceLocation("minecraft", "player"))) {
+        if (id.equals(new ResourceLocation("minecraft", "player"))) {
             if (Minecraft.getMinecraft().player != null) {
                 GameProfile profile = Minecraft.getMinecraft().player.getGameProfile();
                 previewEntity = new EntityOtherPlayerMP(world, profile);
             }
-            else previewEntity = null;
-        } else {
-            Class<? extends Entity> entityClass = EntityList.getClass(entry.mob);
-            
-            if (entityClass == null || !EntityLivingBase.class.isAssignableFrom(entityClass)) {
-                previewEntity = null;
-                return;
-            }
-            
-            Entity created = EntityList.newEntity(entityClass, world);
-            previewEntity = created instanceof EntityLivingBase ? (EntityLivingBase) created : null;
+            return;
         }
         
-        if (previewEntity != null && previewSetIndex >= 0 && previewSetIndex < previewSets.size()) applySetToPreview(previewSets.get(previewSetIndex));
+        Class<? extends Entity> entityClass = EntityList.getClass(id);
+        if (entityClass == null || !EntityLivingBase.class.isAssignableFrom(entityClass)) return;
+        
+        Entity created = EntityList.newEntity(entityClass, world);
+        previewEntity = created instanceof EntityLivingBase ? (EntityLivingBase) created : null;
     }
     
     public static boolean mouseClicked(int mouseX, int mouseY, int button) {
+        if (button == 0 && overlayVisible()) {
+            int barY = previewY + previewSize - BAR_H;
+            if (mouseX >= previewX && mouseX < previewX + previewSize && mouseY >= barY && mouseY < previewY + previewSize) {
+                if (mouseX < previewX + BAR_BUTTON_W) stepPreview(-1);
+                else if (mouseX >= previewX + previewSize - BAR_BUTTON_W) stepPreview(1);
+                else paused = !paused;
+                return true;
+            }
+        }
+        
         if (button == 0 && mouseX >= previewX && mouseX < previewX + previewSize
                 && mouseY >= previewY && mouseY < previewY + previewSize) {
             dragging = true;
@@ -179,30 +200,30 @@ public final class EditScreenShared {
     }
     
     public static boolean mouseScrolled(int rawMouseX, int rawMouseY, double delta) {
-       Minecraft mc = Minecraft.getMinecraft();
+        Minecraft mc = Minecraft.getMinecraft();
         if (delta == 0) {
             return false;
         }
         ScaledResolution sr = new ScaledResolution(mc);
-
+        
         int mouseX = rawMouseX * sr.getScaledWidth() / mc.displayWidth;
-
+        
         int mouseY = sr.getScaledHeight()
                 - rawMouseY * sr.getScaledHeight() / mc.displayHeight
                 - 1;
-
+        
         if (mouseX >= previewX && mouseX < previewX + previewSize
                 && mouseY >= previewY && mouseY < previewY + previewSize) {
-
+            
             previewZoom = MathHelper.clamp(
                     previewZoom + (float)Math.signum(delta) * 0.1F,
                     MIN_ZOOM,
                     MAX_ZOOM
             );
-
+            
             return true;
         }
-
+        
         return false;
     }
     
@@ -317,25 +338,86 @@ public final class EditScreenShared {
         return items.get(items.size() - 1);
     }
     
+    //what the preview cycles through: the sets and replacement mobs under the tree editor's selection
+    public static void setPreviewTarget(List<MobEquipmentReloadListener.EquipmentSet> sets, List<ResourceLocation> mobs) {
+        poolSets = sets;
+        poolMobs = mobs != null ? mobs : Collections.<ResourceLocation>emptyList();
+    }
+    
+    //re-applies the current step (e.g. after an item was added to the shown set)
+    public static void refreshPreview() {
+        if (step >= 0) showStep(step);
+    }
+    
+    //manual stepping from the overlay buttons
+    public static void stepPreview(int direction) {
+        if (total <= 1) return;
+        int next = (Math.max(step, 0) + direction) % total;
+        if (next < 0) next += total;
+        showStep(next);
+        lastCycleTime = System.currentTimeMillis();
+    }
+    
     private static void tickPreviewCycle(MobEquipmentReloadListener.MobEquipmentEntry entry) {
-        List<MobEquipmentReloadListener.EquipmentSet> sets = MobEquipmentSpawnUtil.collectAllSets(entry);
+        List<MobEquipmentReloadListener.EquipmentSet> sets = poolSets != null ? poolSets : MobEquipmentSpawnUtil.collectAllSets(entry);
+        List<ResourceLocation> mobs = !poolMobs.isEmpty() ? poolMobs
+                : (entry.mob != null ? Collections.singletonList(entry.mob) : Collections.<ResourceLocation>emptyList());
         
-        if (!sets.equals(previewSets)) {
-            previewSets = sets;
-            previewSetIndex = -1;
+        if (!sets.equals(lastSets) || !mobs.equals(lastMobs)) {
+            lastSets = sets;
+            lastMobs = mobs;
+            step = -1; //new selection: start over
         }
         
-        if (previewSets.isEmpty()) {
-            applySetToPreview(null);
-            return;
-        }
+        total = Math.max(1, sets.size()) * Math.max(1, mobs.size());
         
         long now = System.currentTimeMillis();
-        if (previewSetIndex == -1 || now - lastCycleTime >= CYCLE_INTERVAL_MS) {
-            previewSetIndex = (previewSetIndex + 1) % previewSets.size();
+        if (step == -1 || (!paused && now - lastCycleTime >= CYCLE_INTERVAL_MS)) {
+            showStep(step == -1 ? 0 : (step + 1) % total);
             lastCycleTime = now;
-            applySetToPreview(previewSets.get(previewSetIndex));
         }
+    }
+    
+    //one step = one (set, mob) pair: every set for the first mob, then every set for the next, ...
+    private static void showStep(int s) {
+        step = s;
+        int setCount = Math.max(1, lastSets.size());
+        int setIndex = s % setCount;
+        int mobIndex = (s / setCount) % Math.max(1, lastMobs.size());
+        
+        ResourceLocation mob = lastMobs.isEmpty() ? null : lastMobs.get(mobIndex);
+        if (!Objects.equals(mob, previewMobId)) showMob(mob, Minecraft.getMinecraft().world);
+        
+        shownSet = lastSets.isEmpty() ? null : lastSets.get(setIndex);
+        applySetToPreview(shownSet);
+        
+        String setName = shownSet == null ? "(no set)"
+                : (shownSet.name != null && !shownSet.name.trim().isEmpty() ? shownSet.name : "Set " + (setIndex + 1));
+        shownLabel = lastMobs.size() > 1 && mob != null ? setName + " - " + mob.getPath() : setName;
+    }
+    
+    //overlay: shown label at the top of the preview, < n/N > bar at the bottom. hidden when the preview is tiny
+    private static final int BAR_H = 12;
+    private static final int BAR_BUTTON_W = 14;
+    
+    private static boolean overlayVisible() {
+        return previewSize >= 60 && total > 1;
+    }
+    
+    private static void renderPreviewOverlay(FontRenderer font) {
+        if (previewSize < 60) return;
+        
+        if (!shownLabel.isEmpty()) {
+            font.drawStringWithShadow(font.trimStringToWidth(shownLabel, previewSize - 6), previewX + 3, previewY + 3, 0xCCCCCC);
+        }
+        if (!overlayVisible()) return;
+        
+        int barY = previewY + previewSize - BAR_H;
+        Gui.drawRect(previewX, barY, previewX + previewSize, previewY + previewSize, 0x99000000);
+        font.drawStringWithShadow("<", previewX + 5, barY + 2, 0xFFFFFF);
+        font.drawStringWithShadow(">", previewX + previewSize - 10, barY + 2, 0xFFFFFF);
+        drawCentered(font, (paused ? "|| " : "") + (step + 1) + "/" + total,
+                previewX + previewSize / 2, barY + 2, paused ? 0xFFAA00 : 0xAAAAAA);
     }
     
     private static final float FILL_FACTOR = 0.6f;
@@ -348,23 +430,31 @@ public final class EditScreenShared {
                 MIN_SCALE,
                 MAX_SCALE
         );
-
+        
         float prevRenderYawOffset = entity.renderYawOffset;
         float prevRotationYaw = entity.rotationYaw;
         float prevRotationPitch = entity.rotationPitch;
         float prevRotationYawHead = entity.rotationYawHead;
         float prevPrevRotationYawHead = entity.prevRotationYawHead;
-
+        
+        RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
+        
+        boolean prevShadow = renderManager.isRenderShadow();
+        float prevPlayerViewY = renderManager.playerViewY;
+        
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        
         GlStateManager.enableColorMaterial();
         GlStateManager.pushMatrix();
+        
         GlStateManager.translate((float) centerX, (float) centerY, 50.0F);
         GlStateManager.scale((float) (-scale), (float) scale, (float) scale);
         GlStateManager.rotate(180.0F, 0.0F, 0.0F, 1.0F);
-
+        
         GlStateManager.rotate(135.0F, 0.0F, 1.0F, 0.0F);
         RenderHelper.enableStandardItemLighting();
         GlStateManager.rotate(-135.0F, 0.0F, 1.0F, 0.0F);
-
+        
         GlStateManager.rotate(previewPitch, 1.0F, 0.0F, 0.0F);
         
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
@@ -375,13 +465,24 @@ public final class EditScreenShared {
         entity.rotationPitch = 0.0F;
         entity.rotationYawHead = entity.rotationYaw;
         entity.prevRotationYawHead = entity.rotationYaw;
-
-        RenderManager renderManager = Minecraft.getMinecraft().getRenderManager();
-
-        boolean prevShadow = renderManager.isRenderShadow();
+        
         renderManager.setRenderShadow(false);
         renderManager.setPlayerViewY(180.0F);
-
+        
+        GlStateManager.enableAlpha();
+        GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+        
+        GlStateManager.enableCull();
+        GlStateManager.cullFace(GlStateManager.CullFace.BACK);
+        
+        GlStateManager.enableDepth();
+        GlStateManager.depthFunc(GL11.GL_LEQUAL);
+        GlStateManager.depthMask(true);
+        
+        GlStateManager.disableBlend();
+        GlStateManager.disableLighting();
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        
         renderManager.renderEntity(
                 entity,
                 0.0D,
@@ -391,25 +492,27 @@ public final class EditScreenShared {
                 1.0F,
                 false
         );
-
+        
         renderManager.setRenderShadow(prevShadow);
-
+        renderManager.setPlayerViewY(prevPlayerViewY);
+        
         entity.renderYawOffset = prevRenderYawOffset;
         entity.rotationYaw = prevRotationYaw;
         entity.rotationPitch = prevRotationPitch;
         entity.rotationYawHead = prevRotationYawHead;
         entity.prevRotationYawHead = prevPrevRotationYawHead;
-
+        
         GlStateManager.popMatrix();
-
+        GL11.glPopAttrib();
+        
         RenderHelper.disableStandardItemLighting();
         GlStateManager.disableRescaleNormal();
-
+        
         GlStateManager.setActiveTexture(OpenGlHelper.lightmapTexUnit);
-        GlStateManager.disableTexture2D();
+        GlStateManager.enableTexture2D();
         GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
-
-        GlStateManager.color(1F, 1F, 1F, 1F);
+        
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
     
     private static int computeFitScale(EntityLivingBase entity, int boxSize) {
@@ -476,42 +579,6 @@ public final class EditScreenShared {
         
         public String label() { return label; }
         public Runnable onClick() { return onClick; }
-    }
-    
-    public static Crumb crumbMain(MobEquipmentReloadListener.MobEquipmentEntry entry) {
-        return new Crumb("Main", () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenMain(entry)));
-    }
-    
-    public static Crumb crumbDifficultyGroup(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg) {
-        return new Crumb("Difficulty Group", () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenDifficultyGroupEntry(main, dg)));
-    }
-    
-    public static Crumb crumbBiomeGroup(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg, MobEquipmentReloadListener.BiomeGroup bg) {
-        return new Crumb("Biome Group", () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenBiomeGroupEntry(main, dg, bg)));
-    }
-    
-    public static Crumb crumbSet(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                 MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set) {
-        String label = set.name != null ? set.name : "Equipment Set";
-        return new Crumb(label, () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenEquipmentSetEntry(main, dg, bg, set)));
-    }
-    
-    public static Crumb crumbSlotsList(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                       MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set) {
-        return new Crumb("Slots", () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenSlots(main, dg, bg, set)));
-    }
-    
-    public static Crumb crumbSlot(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                  MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set,
-                                  EntityEquipmentSlot slot) {
-        return new Crumb(EditScreenSlots.slotLabel(slot),
-                () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenSlotItems(main, dg, bg, set, slot)));
-    }
-    
-    public static Crumb crumbItem(EditScreenMain main, MobEquipmentReloadListener.DifficultyGroup dg,
-                                  MobEquipmentReloadListener.BiomeGroup bg, MobEquipmentReloadListener.EquipmentSet set,
-                                  EntityEquipmentSlot slot, MobEquipmentReloadListener.WeightedItem item) {
-        return new Crumb("Item", () -> Minecraft.getMinecraft().displayGuiScreen(new EditScreenWeightedItemEntry(main, dg, bg, set, slot, item)));
     }
     
     public static Crumb current(String label) {

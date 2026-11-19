@@ -408,7 +408,7 @@ public final class MobEquipmentSpawnUtil {
     /** Jockey spawn type is highly inconsistent, often only affecting one entity or not
      * being set at all (chicken jockey receives the JOCKEY type, but spider jockey copies the type
      * from the originally spawned mob) so this type has to be handled separately by checking for the
-     * entity's riders/mounts with a 1 tick delay after orignal spawn. MobSpawnType.JOCKEY is still used for validation and serialization.
+     * entity's riders/mounts with a 1 tick delay after original spawn. MobSpawnType.JOCKEY is still used for validation and serialization.
      */
     private static boolean spawnTypeMatches(List<MobEquipmentReloadListener.SpawnTypeMatch> matchers, LivingEntity mob) {
         if (matchers.isEmpty()) return true;

@@ -476,6 +476,10 @@ public final class MobEquipmentSpawnUtil {
             MobArmory.LOGGER.warn("Could not spawn replacement {}", id);
             return null;
         }
+        
+        for (Entity passenger : new ArrayList<>(replacement.getPassengers())) {
+            level.addFreshEntityWithPassengers(passenger);
+        }
 
         for (Entity rider : riders) {
             rider.stopRiding();
@@ -532,24 +536,19 @@ public final class MobEquipmentSpawnUtil {
     public static void runPendingSpawns() {
         if (PENDING_SPAWNS.isEmpty()) return;
         
+        List<PendingSpawn> due = new ArrayList<>();
         Iterator<PendingSpawn> iterator = PENDING_SPAWNS.iterator();
-        
         while (iterator.hasNext()) {
             PendingSpawn pending = iterator.next();
-            
-            LivingEntity mob = pending.mob;
-            
-            if (!(mob.level() instanceof ServerLevel level)) {
-                iterator.remove();
-                continue;
-            }
-            
+            if (!(pending.mob.level() instanceof ServerLevel level)) { iterator.remove(); continue; }
             if (level.getGameTime() < pending.processAt) continue;
-            
             iterator.remove();
-            
+            due.add(pending);
+        }
+        
+        for (PendingSpawn pending : due) {
+            LivingEntity mob = pending.mob;
             if (!mob.isAlive() || mob.isRemoved()) continue;
-            
             processSpawn(mob, pending.pos);
         }
     }

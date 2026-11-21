@@ -119,98 +119,65 @@ public class MobEquipmentReloadListener {
     
     private static void apply(Map<ResourceLocation, JsonElement> resources) {
         
-        //group JSONs by mob ID. no override branch here - any two files targeting the same mob merge
-        Map<ResourceLocation, List<JsonFile>> grouped = new HashMap<>();
+        //every file is parsed once, in a fixed order, then handed to each mob it lists. sorted by file id so
+        //first-wins values (top-level chance, difficulty group chance, replacement weights/chance) resolve the
+        //same way every load. sets themselves are pooled, so their order doesn't matter
+        List<ResourceLocation> fileIds = new ArrayList<>(resources.keySet());
+        fileIds.sort(Comparator.comparing(ResourceLocation::toString));
         
-        for (Map.Entry<ResourceLocation, JsonElement> entry : resources.entrySet()) {
-            ResourceLocation fileId = entry.getKey();
-            JsonObject json = entry.getValue().getAsJsonObject();
+        Map<ResourceLocation, List<ParsedFile>> grouped = new HashMap<>();
+        List<MobEquipmentEntry> lookupFiles = new ArrayList<>();
+        
+        for (ResourceLocation fileId : fileIds) {
+            ParsedFile file = parseFile(fileId, resources.get(fileId));
+            if (file == null) continue;
             
-            ResourceLocation mobId;
-            try {
-                mobId = new ResourceLocation(JsonUtils.getString(json, "mob"));
-            } catch (Exception e) {
-                MobArmory.LOGGER.debug("Skipping mob_equipment file {} - no valid 'mob' field", fileId);
-                continue;
+            //command-only, unmerged: one entry per source file (all its mobs), alongside the per-mob merge below.
+            //fileName is the file's stripped path id (e.g. "zombie_snowy") - what listmobsets displays
+            lookupFiles.add(MobEquipmentEntry.of(file.fileId().getPath(), file.mobs(), file.chance(), file.groups()));
+            
+            if (file.fileId().getPath().equals("zombie_example") && !Config.spawnExampleZombie) continue;
+            
+            //no override branch here - any two files targeting the same mob merge
+            for (ResourceLocation mobId : file.mobs()) {
+                grouped.computeIfAbsent(mobId, k -> new ArrayList<>()).add(file);
             }
-            
-            grouped.computeIfAbsent(mobId, k -> new ArrayList<>())
-                    .add(new JsonFile(fileId, json));
         }
         
         Map<ResourceLocation, MobEquipmentEntry> parsed = new HashMap<>();
-        List<MobEquipmentEntry> lookupFiles = new ArrayList<>();
         
-        for (Map.Entry<ResourceLocation, List<JsonFile>> mobEntry : grouped.entrySet()) {
+        for (Map.Entry<ResourceLocation, List<ParsedFile>> mobEntry : grouped.entrySet()) {
             ResourceLocation mobId = mobEntry.getKey();
-            List<JsonFile> files = mobEntry.getValue();
-            
-            //deterministic order regardless of HashMap iteration - matters because biome/set
-            //matching within a merged difficulty group is order-dependent (first match-or-global wins)
-            files.sort(Comparator.comparing(f -> f.fileId().toString()));
             
             float mobChance = -1.0F;
             Map<List<DifficultyLevel>, DifficultyGroup> merged = new LinkedHashMap<>();
             
-            for (JsonFile file : files) {
-                try {
-                    JsonObject json = file.json();
+            for (ParsedFile file : mobEntry.getValue()) {
+                //each file's own declared chance, independent of the merged mob-level value below
+                if (mobChance < 0.0F && file.chance() >= 0.0F) mobChance = file.chance();
+                
+                for (DifficultyGroup g : file.groups()) {
                     
-                    //each file's own declared chance, independent of the merged mob-level value below
-                    float fileChance = JsonUtils.getFloat(json, "chance", -1.0F);
-                    if (mobChance < 0.0F && fileChance >= 0.0F) mobChance = fileChance;
+                    //key = matchers as a set, so ["hard","hardcore"] and ["hardcore","hard"]
+                    //merge into the same group instead of staying separate
+                    List<DifficultyLevel> key = g.matchers.stream().sorted().collect(Collectors.toList());
                     
-                    List<DifficultyGroup> groups;
+                    DifficultyGroup existing = merged.get(key);
                     
-                    if (json.has("difficulties")) {
-                        JsonArray diffArr = json.getAsJsonArray("difficulties");
-                        groups = new ArrayList<>();
-                        for (JsonElement diffEl : diffArr) {
-                            groups.add(parseDifficultyGroup(diffEl.getAsJsonObject(), file.fileId()));
-                        }
+                    if (existing == null) {
+                        merged.put(key, g);
                     } else {
-                        GroupBody body = parseGroupBody(json, file.fileId());
-                        groups = Collections.singletonList(
-                                new DifficultyGroup(
-                                        Collections.singletonList(DifficultyLevel.GLOBAL),
-                                        null,
-                                        body.biomeGroups(),
-                                        body.globalSets()
-                                )
-                        );
+                        //similar to top level chance, the first to define the chance for given difficulty group wins
+                        Float mergedChance = existing.chance != null ? existing.chance : g.chance;
+                        
+                        List<BiomeGroup> mergedBiomes = new ArrayList<>(existing.biomeGroups);
+                        mergedBiomes.addAll(g.biomeGroups);
+                        
+                        List<EquipmentSet> mergedSets = new ArrayList<>(existing.globalSets);
+                        mergedSets.addAll(g.globalSets);
+                        
+                        merged.put(key, new DifficultyGroup(existing.matchers, mergedChance, mergedBiomes, mergedSets));
                     }
-                    
-                    //command-only, unmerged: this file's own contribution kept as-is, alongside the merge below.
-                    //fileName is the file's stripped path id (e.g. "zombie_snowy") - what listmobsets displays
-                    lookupFiles.add(new MobEquipmentEntry(file.fileId().getPath(), mobId, fileChance, groups));
-                    
-                    if (file.fileId().getPath().equals("zombie_example") && !Config.spawnExampleZombie) continue;
-                    
-                    for (DifficultyGroup g : groups) {
-                        
-                        //key = matchers as a set, so ["hard","hardcore"] and ["hardcore","hard"]
-                        //merge into the same group instead of staying separate
-                        List<DifficultyLevel> key = g.matchers.stream().sorted().collect(Collectors.toList());
-                        
-                        DifficultyGroup existing = merged.get(key);
-                        
-                        if (existing == null) {
-                            merged.put(key, g);
-                        } else {
-                            //similar to top level chance, the first to define the chance for given difficulty group wins
-                            Float mergedChance = existing.chance != null ? existing.chance : g.chance;
-                            
-                            List<BiomeGroup> mergedBiomes = new ArrayList<>(existing.biomeGroups);
-                            mergedBiomes.addAll(g.biomeGroups);
-                            
-                            List<EquipmentSet> mergedSets = new ArrayList<>(existing.globalSets);
-                            mergedSets.addAll(g.globalSets);
-                            
-                            merged.put(key, new DifficultyGroup(existing.matchers, mergedChance, mergedBiomes, mergedSets));
-                        }
-                    }
-                } catch (Exception e) {
-                    MobArmory.LOGGER.error("Failed to parse mob_equipment entry {}", file.fileId(), e);
                 }
             }
             
@@ -228,24 +195,82 @@ public class MobEquipmentReloadListener {
         MobArmory.LOGGER.info("Loaded {} mob equipment entries", ENTRIES.size());
     }
     
-    private static class JsonFile {
-        private final ResourceLocation fileId;
-        private final JsonObject json;
+    //null = skipped (no valid mob, or failed to parse; already logged)
+    private static ParsedFile parseFile(ResourceLocation fileId, JsonElement element) {
+        List<ResourceLocation> mobs = Collections.emptyList();
+        if (element.isJsonObject()) {
+            try {
+                mobs = parseMobIds(element.getAsJsonObject());
+            } catch (Exception ignored) {
+                //handled below like a missing field
+            }
+        }
+        if (mobs.isEmpty()) {
+            MobArmory.LOGGER.debug("Skipping mob_equipment file {} - no valid 'mob' field", fileId);
+            return null;
+        }
         
-        JsonFile(ResourceLocation fileId, JsonObject json) {
+        JsonObject json = element.getAsJsonObject();
+        try {
+            float chance = JsonUtils.getFloat(json, "chance", -1.0F);
+            
+            List<DifficultyGroup> groups;
+            if (json.has("difficulties")) {
+                groups = new ArrayList<>();
+                for (JsonElement diffEl : json.getAsJsonArray("difficulties")) {
+                    groups.add(parseDifficultyGroup(diffEl.getAsJsonObject(), fileId));
+                }
+            } else {
+                GroupBody body = parseGroupBody(json, fileId);
+                groups = Collections.singletonList(new DifficultyGroup(
+                        Collections.singletonList(DifficultyLevel.GLOBAL), null, body.biomeGroups(), body.globalSets()));
+            }
+            return new ParsedFile(fileId, mobs, chance, groups);
+        } catch (Exception e) {
+            MobArmory.LOGGER.error("Failed to parse mob_equipment entry {}", fileId, e);
+            return null;
+        }
+    }
+    
+    //"mob" is either one id string (the original format, still what single-mob files are written as) or an array of ids.
+//duplicates are dropped so a file can't merge into the same mob twice
+    private static List<ResourceLocation> parseMobIds(JsonObject json) {
+        JsonElement el = json.get("mob");
+        if (el == null) return new ArrayList<>();
+        
+        Set<ResourceLocation> out = new LinkedHashSet<>();
+        if (el.isJsonArray()) {
+            for (JsonElement e : el.getAsJsonArray()) out.add(new ResourceLocation(e.getAsString()));
+        } else {
+            out.add(new ResourceLocation(el.getAsString()));
+        }
+        return new ArrayList<>(out);
+    }
+    
+    private static class ParsedFile {
+        private final ResourceLocation fileId;
+        private final List<ResourceLocation> mobs;
+        private final float chance;
+        private final List<DifficultyGroup> groups;
+        
+        ParsedFile(ResourceLocation fileId, List<ResourceLocation> mobs, float chance, List<DifficultyGroup> groups) {
             this.fileId = fileId;
-            this.json = json;
+            this.mobs = mobs;
+            this.chance = chance;
+            this.groups = groups;
         }
         
         ResourceLocation fileId() { return fileId; }
-        JsonObject json() { return json; }
+        List<ResourceLocation> mobs() { return mobs; }
+        float chance() { return chance; }
+        List<DifficultyGroup> groups() { return groups; }
     }
     
     //editor round-trip entry point: builds a single MobEquipmentEntry straight from one JSON blob
     //(same schema as the datapack files), no multi-file merging - used when the client hands back
     //an edited entry, or when the server hands one to the client to open in the editor.
     public static MobEquipmentEntry fromJson(String fileName, JsonObject json) {
-        ResourceLocation mob = json.has("mob") ? new ResourceLocation(json.get("mob").getAsString()) : null;
+        List<ResourceLocation> mobs = parseMobIds(json);
         float chance = JsonUtils.getFloat(json, "chance", -1.0F);
         ResourceLocation logKey = new ResourceLocation(MobArmory.MODID, "editor-transfer");
         
@@ -256,14 +281,21 @@ public class MobEquipmentReloadListener {
             }
         }
         
-        return new MobEquipmentEntry(fileName, mob, chance, groups);
+        return MobEquipmentEntry.of(fileName, mobs, chance, groups);
     }
     
     //reverse of fromJson: same schema, entry -> JsonObject. fileName is deliberately excluded -
     //it's packet/transport metadata, not part of the file's own content.
     public static JsonObject toJson(MobEquipmentEntry entry) {
         JsonObject root = new JsonObject();
-        if (entry.mob != null) root.addProperty("mob", entry.mob.toString());
+        //one mob stays a plain string so old stuff works
+        if (entry.mobs.size() == 1) {
+            root.addProperty("mob", entry.mobs.get(0).toString());
+        } else if (entry.mobs.size() > 1) {
+            JsonArray mobArr = new JsonArray();
+            for (ResourceLocation m : entry.mobs) mobArr.add(new JsonPrimitive(m.toString()));
+            root.add("mob", mobArr);
+        }
         root.addProperty("chance", entry.chance);
         
         if (!entry.difficultyGroups.isEmpty()) {
@@ -621,15 +653,30 @@ public class MobEquipmentReloadListener {
         //null for merged entries in ENTRIES, set to the source file's name (e.g. "zombie_snowy")
         //for the unmerged per-file entries in LOOKUP_FILES
         public String fileName;
+        //first of mobs (or null when empty); what the preview and everything single-mob reads. change via setMobs, not directly
         public ResourceLocation mob;
+        //every mob this entry applies to: exactly one for merged ENTRIES entries, one or more for file entries
+        public List<ResourceLocation> mobs;
         public float chance;
         public List<DifficultyGroup> difficultyGroups;
         
         public MobEquipmentEntry(String fileName, ResourceLocation mob, float chance, List<DifficultyGroup> difficultyGroups) {
             this.fileName = fileName;
-            this.mob = mob;
             this.chance = chance;
             this.difficultyGroups = difficultyGroups;
+            setMobs(mob == null ? Collections.<ResourceLocation>emptyList() : Collections.singletonList(mob));
+        }
+        
+        //factory instead of an overload, so existing new MobEquipmentEntry(x, null, ...) calls don't become ambiguous
+        public static MobEquipmentEntry of(String fileName, List<ResourceLocation> mobs, float chance, List<DifficultyGroup> difficultyGroups) {
+            MobEquipmentEntry e = new MobEquipmentEntry(fileName, (ResourceLocation) null, chance, difficultyGroups);
+            e.setMobs(mobs);
+            return e;
+        }
+        
+        public void setMobs(List<ResourceLocation> newMobs) {
+            this.mobs = new ArrayList<>(newMobs);
+            this.mob = newMobs.isEmpty() ? null : newMobs.get(0);
         }
     }
     

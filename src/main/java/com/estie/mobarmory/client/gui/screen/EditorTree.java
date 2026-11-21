@@ -24,7 +24,6 @@ import net.minecraft.entity.EntityList;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.EntityEquipmentSlot;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemMonsterPlacer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
@@ -37,10 +36,8 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -166,20 +163,27 @@ public final class EditorTree {
     
     public static EditorNode build(MobEquipmentEntry entry, Hooks h) {
         EditorNode root = new EditorNode(null, entry,
-                () -> "Mob: " + (entry.mob != null ? entry.mob.toString() : "(none)"),
+                () -> mobsLabel(entry),
                 () -> entry.chance >= 0 ? pct(entry.chance) : "");
         root.icon = () -> mobIcon(entry);
         
-        root.fields.add(Field.text("Mob ID",
-                        () -> entry.mob != null ? entry.mob.toString() : "",
+        root.fields.add(Field.multiline("Mob IDs", "Mob IDs (one per line, e.g. minecraft:zombie)",
+                        () -> entry.mobs.stream().map(ResourceLocation::toString).collect(Collectors.joining("\n")),
                         v -> {
-                            ResourceLocation id = tryParse(normalizeId(v.trim()));
-                            if (isBlank(v) || id == null) return "Invalid id";
-                            entry.mob = id;
+                            List<ResourceLocation> parsed = new ArrayList<>();
+                            for (String tok : splitList(v)) {
+                                ResourceLocation id = tryParse(normalizeId(tok));
+                                if (id == null) return "Invalid mob id '" + tok + "'";
+                                if (!parsed.contains(id)) parsed.add(id);
+                            }
+                            if (parsed.isEmpty()) return "At least one mob id";
+                            entry.setMobs(parsed);
                             h.mobChanged();
                             return null;
-                        })
-                .warn(v -> EditScreenShared.mobExists(normalizeId(v.trim())) ? null : "Warning: entity type not found"));
+                        },
+                        v -> splitList(v).stream().allMatch(tok -> EditScreenShared.mobExists(normalizeId(tok))),
+                        "Warning: entity type not found")
+                .buttonText(v -> listButton(v, "mob", "(none)")));
         
         root.fields.add(Field.text("Chance",
                         () -> String.valueOf(entry.chance),
@@ -681,9 +685,7 @@ public final class EditorTree {
         while (top.parent != null) top = top.parent;
         
         LinkedHashSet<ResourceLocation> mobs = new LinkedHashSet<>();
-        if (top.key instanceof MobEquipmentEntry && ((MobEquipmentEntry) top.key).mob != null) {
-            mobs.add(((MobEquipmentEntry) top.key).mob);
-        }
+        if (top.key instanceof MobEquipmentEntry) mobs.addAll(((MobEquipmentEntry) top.key).mobs);
         mobs.addAll(replacements);
         return new ArrayList<>(mobs);
     }
@@ -694,6 +696,13 @@ public final class EditorTree {
             return;
         }
         for (EditorNode c : node.children) collectReplacements(c, out);
+    }
+    
+    private static String mobsLabel(MobEquipmentEntry entry) {
+        if (entry.mobs.isEmpty()) return "Mob: (none)";
+        if (entry.mobs.size() == 1) return "Mob: " + entry.mobs.get(0);
+        return "Mobs (" + entry.mobs.size() + "): "
+                + entry.mobs.stream().map(r -> stripNamespace(r.toString())).collect(Collectors.joining(", "));
     }
     
     //spawn egg when the mob has one, otherwise a zombie head

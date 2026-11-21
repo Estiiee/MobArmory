@@ -14,11 +14,13 @@ import com.estie.mobarmory.data.MobEquipmentReloadListener.SpawnTypeMatch;
 import com.estie.mobarmory.data.MobEquipmentReloadListener.WeightedItem;
 import com.estie.mobarmory.data.MobEquipmentReloadListener.YComparator;
 import net.minecraft.inventory.EntityEquipmentSlot;
+import net.minecraft.util.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class EntryToBuilder {
     
@@ -26,7 +28,7 @@ public final class EntryToBuilder {
     
     public static MobEquipmentBuilder toBuilder(MobEquipmentEntry entry) {
         MobEquipmentBuilder b = MobEquipmentBuilder
-                .mob(entry.mob != null ? entry.mob.toString() : "")
+                .mobs(entry.mobs.stream().map(ResourceLocation::toString).collect(Collectors.toList()))
                 .chance(entry.chance);
         
         for (DifficultyGroup group : entry.difficultyGroups) {

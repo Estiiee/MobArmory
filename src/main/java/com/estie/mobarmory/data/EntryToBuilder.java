@@ -25,7 +25,7 @@ public final class EntryToBuilder {
     
     public static MobEquipmentBuilder toBuilder(MobEquipmentEntry entry) {
         MobEquipmentBuilder b = MobEquipmentBuilder
-                .mob(entry.mob != null ? entry.mob.toString() : "")
+                .mobs(entry.mobs.stream().map(ResourceLocation::toString).toList())
                 .chance(entry.chance);
         
         for (DifficultyGroup group : entry.difficultyGroups) {

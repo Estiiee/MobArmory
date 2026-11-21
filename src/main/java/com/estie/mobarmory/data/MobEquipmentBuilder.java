@@ -15,14 +15,24 @@ import java.util.*;
 
 public class MobEquipmentBuilder {
     
-    private ResourceLocation mob;
     private float chance = -1.0f;
-    
+    private final List<ResourceLocation> mobs = new ArrayList<>();
     private final List<DifficultyGroupBuilder> difficultyGroups = new ArrayList<>();
     
     public static MobEquipmentBuilder mob(String id) {
+        return mobs(List.of(id));
+    }
+    
+    public static MobEquipmentBuilder mobs(String... ids) {
+        return mobs(Arrays.asList(ids));
+    }
+    
+    public static MobEquipmentBuilder mobs(Collection<String> ids) {
         MobEquipmentBuilder b = new MobEquipmentBuilder();
-        b.mob = new ResourceLocation(id);
+        for (String id : ids) {
+            ResourceLocation rl = new ResourceLocation(id);
+            if (!b.mobs.contains(rl)) b.mobs.add(rl);
+        }
         return b;
     }
     
@@ -65,7 +75,14 @@ public class MobEquipmentBuilder {
     private JsonObject buildJson() {
         JsonObject root = new JsonObject();
         
-        root.addProperty("mob", mob.toString());
+        if (mobs.size() == 1) {
+            root.addProperty("mob", mobs.get(0).toString());
+        } else if (mobs.size() > 1) {
+            JsonArray mobArr = new JsonArray();
+            for (ResourceLocation m : mobs) mobArr.add(m.toString());
+            root.add("mob", mobArr);
+        }
+        
         root.addProperty("chance", chance);
         
         if (!difficultyGroups.isEmpty()) {
@@ -123,7 +140,7 @@ public class MobEquipmentBuilder {
         }
         
         //use to skip difficulty restrictions.
-        //can be mixed with match(), in which case specific groups take priority and global acts as a fallback for all other difficulties
+        //can be mixed with match(), in which case global groups always pass while the rest only if they match
         public DifficultyGroupBuilder global() {
             matchers.add("global");
             return this;
@@ -195,7 +212,7 @@ public class MobEquipmentBuilder {
         }
         
         //use to skip biome restrictions.
-        //can be mixed with match(), in which case specific groups take priority and global acts as a fallback for all other biomes
+        //can be mixed with match(), in which case global groups always pass while the rest only if they match
         public BiomeGroupBuilder global() {
             matchers.add("global");
             return this;

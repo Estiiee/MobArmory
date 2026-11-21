@@ -133,20 +133,27 @@ public final class EditorTree {
     
     public static EditorNode build(MobEquipmentEntry entry, Hooks h) {
         EditorNode root = new EditorNode(null, entry,
-                () -> "Mob: " + (entry.mob != null ? entry.mob.toString() : "(none)"),
+                () -> mobsLabel(entry),
                 () -> entry.chance >= 0 ? pct(entry.chance) : "");
         root.icon = () -> mobIcon(entry);
         
-        root.fields.add(Field.text("Mob ID",
-                        () -> entry.mob != null ? entry.mob.toString() : "",
+        root.fields.add(Field.multiline("Mob IDs", "Mob IDs (one per line, e.g. minecraft:zombie)",
+                        () -> entry.mobs.stream().map(ResourceLocation::toString).collect(Collectors.joining("\n")),
                         v -> {
-                            ResourceLocation id = ResourceLocation.tryParse(normalizeId(v.trim()));
-                            if (v.isBlank() || id == null) return "Invalid id";
-                            entry.mob = id;
+                            List<ResourceLocation> parsed = new ArrayList<>();
+                            for (String tok : splitList(v)) {
+                                ResourceLocation id = ResourceLocation.tryParse(normalizeId(tok));
+                                if (id == null) return "Invalid mob id '" + tok + "'";
+                                if (!parsed.contains(id)) parsed.add(id);
+                            }
+                            if (parsed.isEmpty()) return "At least one mob id";
+                            entry.setMobs(parsed);
                             h.mobChanged();
                             return null;
-                        })
-                .warn(v -> EditScreenShared.mobExists(normalizeId(v.trim())) ? null : "Warning: entity type not found"));
+                        },
+                        v -> splitList(v).stream().allMatch(tok -> EditScreenShared.mobExists(normalizeId(tok))),
+                        "Warning: entity type not found")
+                .buttonText(v -> listButton(v, "mob", "(none)")));
         
         root.fields.add(Field.text("Chance",
                         () -> String.valueOf(entry.chance),
@@ -653,7 +660,7 @@ public final class EditorTree {
         while (top.parent != null) top = top.parent;
         
         LinkedHashSet<ResourceLocation> mobs = new LinkedHashSet<>();
-        if (top.key instanceof MobEquipmentEntry entry && entry.mob != null) mobs.add(entry.mob);
+        if (top.key instanceof MobEquipmentEntry entry) mobs.addAll(entry.mobs);
         mobs.addAll(replacements);
         return new ArrayList<>(mobs);
     }
@@ -664,6 +671,13 @@ public final class EditorTree {
             return;
         }
         for (EditorNode c : node.children) collectReplacements(c, out);
+    }
+    
+    private static String mobsLabel(MobEquipmentEntry entry) {
+        if (entry.mobs.isEmpty()) return "Mob: (none)";
+        if (entry.mobs.size() == 1) return "Mob: " + entry.mobs.get(0);
+        return "Mobs (" + entry.mobs.size() + "): "
+                + entry.mobs.stream().map(r -> stripNamespace(r.toString())).collect(Collectors.joining(", "));
     }
     
     private static ItemStack mobIcon(MobEquipmentEntry entry) {

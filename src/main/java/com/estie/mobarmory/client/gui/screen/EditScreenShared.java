@@ -40,7 +40,7 @@ public final class EditScreenShared {
     private static MobEquipmentReloadListener.EquipmentSet shownSet;
     private static String shownLabel = "";
     
-    //what the preview cycles through. null/empty = defaults (every set of the entry, the entry's own mob).
+    //what the preview cycles through. null/empty = defaults (every set of the entry, the entry's mobs).
     //the tree editor narrows this down to whatever is selected
     private static List<MobEquipmentReloadListener.EquipmentSet> poolSets = null;
     private static List<ResourceLocation> poolMobs = List.of();
@@ -84,7 +84,8 @@ public final class EditScreenShared {
         previewY = 60;
         previewSize = previewSizeArg;
         
-        String mobLabel = entry.mob != null ? entry.mob.toString() : "(no mob chosen)";
+        ResourceLocation shownMob = previewMobId != null ? previewMobId : entry.mob;
+        String mobLabel = shownMob != null ? shownMob.toString() : "(no mob chosen)";
         gfx.drawCenteredString(font, mobLabel, previewX + previewSize / 2, previewY - 12, 0xAAAAAA);
         
         gfx.fill(previewX, previewY, previewX + previewSize, previewY + previewSize, 0xFF333333);
@@ -290,8 +291,7 @@ public final class EditScreenShared {
     
     private static void tickPreviewCycle(MobEquipmentReloadListener.MobEquipmentEntry entry) {
         List<MobEquipmentReloadListener.EquipmentSet> sets = poolSets != null ? poolSets : collectAllSets(entry);
-        List<ResourceLocation> mobs = !poolMobs.isEmpty() ? poolMobs
-                : (entry.mob != null ? List.of(entry.mob) : List.of());
+        List<ResourceLocation> mobs = !poolMobs.isEmpty() ? poolMobs : entry.mobs;
         
         if (!sets.equals(lastSets) || !mobs.equals(lastMobs)) {
             lastSets = sets;
